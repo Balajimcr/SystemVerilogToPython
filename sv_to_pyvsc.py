@@ -8,7 +8,7 @@ classes and generating suggested pyvsc equivalents.
 IMPORTANT: This is a translation ASSISTANT, not an automated converter.
 All generated code should be reviewed and validated by a verification engineer.
 
-Author: Balaji R
+Author: Algorithm Architect
 Version: 1.1.0
 """
 
@@ -123,7 +123,10 @@ WIDTH_MAP = {
 # Python keywords to avoid prefixing with self.
 PYTHON_KEYWORDS = frozenset({
     'if', 'else', 'for', 'while', 'in', 'not', 'and', 'or',
-    'True', 'False', 'None', 'pass', 'break', 'continue', 'return'
+    'True', 'False', 'None', 'pass', 'break', 'continue', 'return',
+    # SV keywords that should not get self. prefix
+    'inside', 'dist', 'solve', 'before', 'soft', 'unique', 'foreach',
+    'vsc', 'self', 'with', 'as'
 })
 
 # Constraint analysis patterns
@@ -222,36 +225,108 @@ class SVParser:
         return classes
 
     def _extract_fields(self, class_body: str) -> List[SVField]:
-        """Extract field declarations while ignoring constraint/function blocks."""
+        """Extract field declarations from class body."""
         fields = []
-        
-        # Strip constraint blocks and functions to avoid mis-parsing their contents as fields
-        # This handles nested braces within constraints to ensure the entire block is removed
-        clean_body = re.sub(r'constraint\s+\w+\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', '', class_body, flags=re.DOTALL)
-        clean_body = re.sub(r'function\s+.*?endfunction', '', clean_body, flags=re.DOTALL)
-
         patterns = [
+            # rand/randc bit/logic [N:0] name [array]
             r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
+            # rand/randc int/byte/shortint/longint [unsigned] name
             r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(unsigned))?\s+(\w+)\s*;',
+            # rand/randc enum_type name
             r'(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*;',
         ]
 
-        seen_names = set()
+        # Remove constraint blocks, function blocks from class body before parsing fields
+        cleaned_body = self._remove_blocks_for_field_extraction(class_body)
 
-        for line in clean_body.split(';'):
+        for line in cleaned_body.split(';'):
             line = line.strip()
-            if not line: continue 
+            if not line:
+                continue
             
+            # Skip lines that look like constraint internals or other non-field content
+            skip_keywords = ['solve ', 'inside ', 'dist ', ' before ', 'foreach', 
+                           'unique', 'constraint ', 'function ', 'endfunction',
+                           'if ', 'else', 'return', '==', '!=', '<=', '>=', '->']
+            if any(kw in line for kw in skip_keywords):
+                continue
+            
+            # Skip lines that are just braces or comments
+            if line in ['}', '{', '} else {'] or line.startswith('//'):
+                continue
+
+            # Handle comma-separated field declarations: rand bit [7:0] a, b, c;
+            comma_match = re.match(r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)', line)
+            if comma_match:
+                rand_type, data_type, width_str, names_str = comma_match.groups()
+                width = int(width_str) + 1 if width_str else 1
+                field_type = {'rand': FieldType.RAND, 'randc': FieldType.RANDC}.get(rand_type, FieldType.NON_RAND)
+                
+                for name in names_str.split(','):
+                    name = name.strip()
+                    if name and self._is_valid_field_name(name):
+                        fields.append(SVField(
+                            name=name, width=width, field_type=field_type,
+                            original_line=f"{rand_type or ''} {data_type} [{width-1}:0] {name};".strip(),
+                            data_type=data_type
+                        ))
+                continue
+
+            # Try each standard pattern
             for pattern in patterns:
                 match = re.search(pattern, line + ';')
                 if match:
                     parsed = self._parse_field_match(match.groups(), line + ';')
-                    # Prevent duplicate entries in __init__
-                    if parsed and parsed.name not in seen_names:
+                    if parsed and self._is_valid_field_name(parsed.name):
                         fields.append(parsed)
-                        seen_names.add(parsed.name)
                     break
+
         return fields
+
+    def _remove_blocks_for_field_extraction(self, class_body: str) -> str:
+        """Remove constraint and function blocks from class body for field extraction."""
+        result = []
+        i = 0
+        in_block = False
+        brace_depth = 0
+        block_keywords = ['constraint', 'function', 'task']
+        
+        lines = class_body.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            
+            # Check if entering a block
+            if not in_block:
+                if any(re.match(rf'\s*{kw}\s+\w+', stripped) for kw in block_keywords):
+                    in_block = True
+                    brace_depth = 0
+            
+            if in_block:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if brace_depth <= 0 and ('}' in stripped or 'endfunction' in stripped or 'endtask' in stripped):
+                    in_block = False
+                    brace_depth = 0
+            else:
+                result.append(line)
+        
+        return '\n'.join(result)
+
+    def _is_valid_field_name(self, name: str) -> bool:
+        """Check if name is a valid field name (not a keyword or garbage)."""
+        if not name:
+            return False
+        # Must be a valid identifier
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+            return False
+        # Must not be a reserved word or look like garbage
+        invalid_names = {'format', 'before', 'inside', 'solve', 'if', 'else', 
+                        'constraint', 'function', 'endfunction', 'return', 'this'}
+        if name in invalid_names:
+            return False
+        # Must not start with underscore (often indicates internal/garbage)
+        if name.startswith('_'):
+            return False
+        return True
 
     def _parse_field_match(self, groups: tuple, original: str) -> Optional[SVField]:
         """Parse matched field groups into SVField."""
@@ -874,26 +949,19 @@ from typing import Optional'''
         elif fld.data_type == 'int':
             return "vsc.int32_t()"
         return f"vsc.bit_t({fld.width})"
+
     def _generate_constraint(self, constraint: SVConstraint) -> List[str]:
-        """
-        Generate pyvsc constraint from SV constraint with variable validation.
-        """
-        # Calculate per-constraint metrics
-        # This now includes 'sv_var_list' from our updated metrics function
+        """Generate pyvsc constraint from SV constraint."""
+        # Calculate per-constraint metrics from source
         metrics = self._calculate_constraint_metrics(constraint.body)
         
-        # Translate the body into Python lines
+        # First translate the body to get output
         body_lines = self._translate_constraint_body(constraint.body)
-        translated_text = "\n".join(body_lines)
+        body_code = '\n'.join(body_lines)
         
-        # Identify variables that are in the SV source but missing from the Python output
-        # We check for the presence of 'self.var_name' specifically
-        missing_vars = [
-            v for v in metrics.get('sv_var_list', []) 
-            if f"self.{v}" not in translated_text and v not in translated_text
-        ]
+        # Calculate output metrics
+        output_metrics = self._calculate_output_metrics(body_code, metrics['variable_names'])
         
-        # Start building the Python method
         lines = [
             f"{self.INDENT}@vsc.constraint",
             f"{self.INDENT}def {constraint.name}(self):",
@@ -901,7 +969,6 @@ from typing import Optional'''
             f'{self.INDENT}{self.INDENT}Original SV constraint:',
         ]
 
-        # Preserve original SV lines in the docstring
         for orig_line in constraint.body.split('\n'):
             if orig_line.strip():
                 lines.append(f'{self.INDENT}{self.INDENT}{orig_line.strip()}')
@@ -911,41 +978,37 @@ from typing import Optional'''
         lines.append(f'{self.INDENT}{self.INDENT}--- Constraint Metrics ---')
         lines.append(f'{self.INDENT}{self.INDENT}Lines: {metrics["lines"]} | Variables: {metrics["variables"]}')
         
-        # --- NEW ERROR REPORTING ---
-        if missing_vars:
-            error_msg = f"ERROR: Missing variables in output: {', '.join(missing_vars)}"
-            lines.append(f'{self.INDENT}{self.INDENT}{error_msg}')
-            self._add_warning(f"Constraint '{constraint.name}': {error_msg}")
+        # Conditionals with output comparison
+        if metrics['conditionals'] > 0 or metrics['else_count'] > 0:
+            cond_str = f'Conditionals: {metrics["conditionals"]} (if: {metrics["if_count"]}, else-if: {metrics["else_if_count"]}, else: {metrics["else_count"]})'
+            out_cond = f' -> Output: if_then: {output_metrics["if_then"]}, else_if: {output_metrics["else_if"]}, else_then: {output_metrics["else_then"]}'
+            lines.append(f'{self.INDENT}{self.INDENT}{cond_str}{out_cond}')
         
-        # Original Metrics: Conditionals
-        if metrics['conditionals'] > 0:
-            lines.append(f'{self.INDENT}{self.INDENT}Conditionals: {metrics["conditionals"]} (if: {metrics["if_count"]}, else-if: {metrics["else_if_count"]})')
-        
-        # Original Metrics: Logical operators
+        # Logical operators
         if metrics['logical_total'] > 0:
-            lines.append(f'{self.INDENT}{self.INDENT}Logical Ops: {metrics["logical_total"]} (&&: {metrics["and_count"]}, ||: {metrics["or_count"]}, !: {metrics["not_count"]})')
+            lines.append(f'{self.INDENT}{self.INDENT}Logical Ops: {metrics["logical_total"]} (&&: {metrics["and_count"]}, ||: {metrics["or_count"]}, !: {metrics["not_count"]}) -> Output: and: {output_metrics["and"]}, or: {output_metrics["or"]}, not: {output_metrics["not"]}')
         
-        # Original Metrics: Constraint constructs
+        # Constraint constructs with output comparison
         constructs = []
         if metrics['inside_count'] > 0:
-            constructs.append(f'inside: {metrics["inside_count"]}')
+            constructs.append(f'inside: {metrics["inside_count"]}->{output_metrics["rangelist"]}')
         if metrics['implies_count'] > 0:
-            constructs.append(f'implies: {metrics["implies_count"]}')
+            constructs.append(f'implies: {metrics["implies_count"]}->{output_metrics["implies"]}')
         if metrics['dist_count'] > 0:
-            constructs.append(f'dist: {metrics["dist_count"]}')
+            constructs.append(f'dist: {metrics["dist_count"]}->{output_metrics["dist"]}')
         if metrics['solve_count'] > 0:
-            constructs.append(f'solve_order: {metrics["solve_count"]}')
+            constructs.append(f'solve: {metrics["solve_count"]}->{output_metrics["solve_order"]}')
         if metrics['foreach_count'] > 0:
-            constructs.append(f'foreach: {metrics["foreach_count"]}')
+            constructs.append(f'foreach: {metrics["foreach_count"]}->{output_metrics["foreach"]}')
         if metrics['unique_count'] > 0:
-            constructs.append(f'unique: {metrics["unique_count"]}')
+            constructs.append(f'unique: {metrics["unique_count"]}->{output_metrics["unique"]}')
         if metrics['soft_count'] > 0:
-            constructs.append(f'soft: {metrics["soft_count"]}')
+            constructs.append(f'soft: {metrics["soft_count"]}->{output_metrics["soft"]}')
         
         if constructs:
-            lines.append(f'{self.INDENT}{self.INDENT}Constructs: {", ".join(constructs)}')
+            lines.append(f'{self.INDENT}{self.INDENT}Constructs (SV->Py): {", ".join(constructs)}')
         
-        # Original Metrics: Special items
+        # Special items
         specials = []
         if metrics['bit_slices'] > 0:
             specials.append(f'bit_slices: {metrics["bit_slices"]}')
@@ -955,10 +1018,17 @@ from typing import Optional'''
         if specials:
             lines.append(f'{self.INDENT}{self.INDENT}Special: {", ".join(specials)}')
         
-        # Close the docstring
+        # Variable validation
+        if output_metrics['missing_vars']:
+            lines.append(f'{self.INDENT}{self.INDENT}⚠️ MISSING VARS: {", ".join(sorted(output_metrics["missing_vars"]))}')
+            self._add_warning(f"Constraint '{constraint.name}': Variables missing in output: {', '.join(sorted(output_metrics['missing_vars']))}")
+        
+        if output_metrics['name_mismatches']:
+            lines.append(f'{self.INDENT}{self.INDENT}⚠️ NAME CHANGES: {output_metrics["name_mismatches"]}')
+            self._add_warning(f"Constraint '{constraint.name}': Variable names may have changed")
+        
         lines.append(f'{self.INDENT}{self.INDENT}"""')
 
-        # Append the translated Python logic
         if body_lines:
             for line in body_lines:
                 lines.append(f"{self.INDENT}{self.INDENT}{line}")
@@ -968,18 +1038,82 @@ from typing import Optional'''
 
         return lines
 
-    def _calculate_constraint_metrics(self, body: str) -> Dict[str, any]:
-        """
-        Calculate comprehensive metrics for a single constraint body,
-        including a list of all variables for validation.
-        """
+    def _calculate_output_metrics(self, body_code: str, sv_var_names: Set[str]) -> Dict:
+        """Calculate metrics from generated Python code and validate variables."""
+        metrics = {
+            'if_then': body_code.count('vsc.if_then('),
+            'else_if': body_code.count('vsc.else_if('),
+            'else_then': body_code.count('vsc.else_then'),
+            'rangelist': body_code.count('vsc.rangelist('),
+            'implies': body_code.count('vsc.implies('),
+            'dist': body_code.count('vsc.dist('),
+            'solve_order': body_code.count('vsc.solve_order('),
+            'foreach': body_code.count('vsc.foreach('),
+            'unique': body_code.count('vsc.unique('),
+            'soft': body_code.count('vsc.soft('),
+            'and': len(re.findall(r'\band\b', body_code)),
+            'or': len(re.findall(r'\bor\b', body_code)),
+            'not': len(re.findall(r'\bnot\b', body_code)),
+            'missing_vars': set(),
+            'name_mismatches': [],
+        }
+        
+        # Extract variables from output (self.var patterns)
+        output_vars = set(re.findall(r'self\.([a-zA-Z_][a-zA-Z0-9_]*)', body_code))
+        
+        # Also extract loop index variables (they don't have self. prefix)
+        loop_vars = set(re.findall(r'as\s+(\w+):', body_code))
+        
+        # Check for missing variables
+        for sv_var in sv_var_names:
+            # Skip SV number literal patterns (hXX, bXX, dXX)
+            if re.match(r'^[hbdHBD][0-9a-fA-F]+$', sv_var):
+                continue
+            
+            # Skip common loop index variables
+            if sv_var in {'i', 'j', 'k', 'idx', 'index'}:
+                continue
+                
+            # Skip if it's used as loop variable
+            if sv_var in loop_vars:
+                continue
+            
+            # Skip enum-like values (ALL_CAPS)
+            if sv_var.isupper():
+                continue
+            
+            # Skip if it's in output
+            if sv_var in output_vars:
+                continue
+                
+            # Check if it might be a modified name (underscore issues)
+            found = False
+            for out_var in output_vars:
+                # Check if names are similar (ignoring underscores near numbers)
+                sv_normalized = re.sub(r'_(\d)', r'\1', sv_var)
+                out_normalized = re.sub(r'_(\d)', r'\1', out_var)
+                if sv_normalized == out_normalized and sv_var != out_var:
+                    metrics['name_mismatches'].append(f'{sv_var}->{out_var}')
+                    found = True
+                    break
+            
+            if not found:
+                # Only add to missing if it looks like a real variable (not a literal)
+                if not re.match(r'^\d', sv_var):  # Doesn't start with digit
+                    metrics['missing_vars'].add(sv_var)
+        
+        return metrics
+
+    def _calculate_constraint_metrics(self, body: str) -> Dict[str, int]:
+        """Calculate metrics for a single constraint body."""
         metrics = {
             'lines': len([l for l in body.split('\n') if l.strip()]),
             'variables': 0,
-            'sv_var_list': [], # Added to track actual variable names for cross-validation
+            'variable_names': set(),  # Track actual variable names
             'conditionals': 0,
             'if_count': 0,
             'else_if_count': 0,
+            'else_count': 0,  # Track else blocks
             'and_count': 0,
             'or_count': 0,
             'not_count': 0,
@@ -998,6 +1132,11 @@ from typing import Optional'''
         # Count conditionals
         metrics['if_count'] = len(re.findall(r'\bif\s*\(', body))
         metrics['else_if_count'] = len(re.findall(r'\belse\s+if\s*\(', body))
+        # Count else blocks - both braced and inline
+        else_with_brace = len(re.findall(r'\}\s*else\s*\{', body))
+        else_inline = len(re.findall(r';\s*else\b(?!\s*if)', body))  # ; else (not else if)
+        else_newline = len(re.findall(r'\n\s*else\b(?!\s*if)', body))  # newline else
+        metrics['else_count'] = else_with_brace + else_inline + else_newline
         metrics['conditionals'] = metrics['if_count'] + metrics['else_if_count']
         
         # Count logical operators
@@ -1016,21 +1155,17 @@ from typing import Optional'''
         metrics['soft_count'] = len(re.findall(r'\bsoft\s+', body))
         
         # Count special items
-        # Updated bit_slices to detect single index [0] and range [7:0]
-        metrics['bit_slices'] = len(re.findall(r'\w+\[\d+(?::\d+)?\]', body))
+        metrics['bit_slices'] = len(re.findall(r'\w+\[\d+:\d+\]', body))
         metrics['number_formats'] = len(re.findall(r"\d+'[hHbBdDoO]", body))
         
-        # Identify and track all unique variables (identifiers excluding keywords)
-        sv_keywords = {
-            'if', 'else', 'inside', 'dist', 'solve', 'before', 
-            'foreach', 'unique', 'soft', 'constraint', 'rand',
-            'randc', 'bit', 'logic', 'int', 'byte', 'size', 'solve', 'before'
-        }
+        # Count variables (unique identifiers excluding keywords)
+        sv_keywords = {'if', 'else', 'inside', 'dist', 'solve', 'before', 
+                      'foreach', 'unique', 'soft', 'constraint', 'rand',
+                      'randc', 'bit', 'logic', 'int', 'byte', 'size', 'this'}
         identifiers = set(re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', body))
-        sv_vars = identifiers - sv_keywords
-        
-        metrics['sv_var_list'] = sorted(list(sv_vars)) # Store sorted list for stable reporting
-        metrics['variables'] = len(sv_vars)
+        var_names = identifiers - sv_keywords
+        metrics['variables'] = len(var_names)
+        metrics['variable_names'] = var_names
         
         return metrics
 
@@ -1043,49 +1178,63 @@ from typing import Optional'''
         return lines
 
     @staticmethod
-    def _split_statements(self, body: str) -> List[str]:
-        """
-        Enhanced statement splitter that preserves sibling statements 
-        appearing after braced blocks (if/else).
-        """
+    def _split_statements(body: str) -> List[str]:
+        """Split constraint body into individual statements."""
         statements = []
         current = ""
         brace_depth = 0
+        paren_depth = 0
         i = 0
         
         while i < len(body):
             char = body[i]
             
-            # Track brace nesting depth
-            if char == '{': 
+            if char == '{':
                 brace_depth += 1
-            elif char == '}': 
+                current += char
+            elif char == '}':
                 brace_depth -= 1
-            
-            current += char
-            
-            # When we are back at the top-level scope (brace_depth 0)
-            if brace_depth == 0:
-                # 1. Standard semicolon statement end
-                if char == ';':
-                    if current.strip():
-                        statements.append(current.strip())
-                    current = ""
-                # 2. End of a braced block (like an if-statement)
-                elif char == '}':
-                    # Peek at the remaining text to see if an 'else' follows
+                current += char
+                
+                # If we just closed the outermost brace, this might be end of a block statement
+                if brace_depth == 0 and paren_depth == 0:
+                    # Check if this is an if/else block by looking for else after
+                    # Skip whitespace and semicolons to find else
                     remaining = body[i+1:].lstrip()
+                    if remaining.startswith(';'):
+                        remaining = remaining[1:].lstrip()
                     if not remaining.startswith('else'):
-                        # No else follows; this is a complete standalone block
+                        # End of block statement - save it
                         if current.strip():
                             statements.append(current.strip())
                         current = ""
+            elif char == '(':
+                paren_depth += 1
+                current += char
+            elif char == ')':
+                paren_depth -= 1
+                current += char
+            elif char == ';' and brace_depth == 0 and paren_depth == 0:
+                # Check if next non-whitespace is else or else if
+                remaining = body[i+1:].lstrip()
+                if remaining.startswith('else'):
+                    # Include the semicolon and keep collecting for the else/else if
+                    current += char
+                else:
+                    # Normal statement end - include semicolon
+                    current += char
+                    if current.strip():
+                        statements.append(current.strip())
+                    current = ""
+            else:
+                current += char
+            
             i += 1
         
-        # Catch any final remaining text
+        # Don't forget any remaining content
         if current.strip():
             statements.append(current.strip())
-            
+        
         return statements
 
     def _translate_statement(self, stmt: str) -> List[str]:
@@ -1552,10 +1701,34 @@ from typing import Optional'''
         
         # Check if body starts with if (nested conditional)
         if re.match(r'if\s*\(', body):
-            nested_lines = self._parse_full_conditional(body, indent_level)
-            return nested_lines
+            # Find where the conditional ends
+            cond_end = self._find_conditional_end(body)
+            cond_part = body[:cond_end].strip()
+            remaining_part = body[cond_end:].strip()
+            
+            # Parse the conditional part
+            nested_lines = self._parse_full_conditional(cond_part, indent_level)
+            lines.extend(nested_lines)
+            
+            # Parse any remaining statements after the conditional
+            if remaining_part:
+                for stmt in self._split_statements(remaining_part):
+                    stmt = stmt.strip().rstrip(';').strip()
+                    if not stmt:
+                        continue
+                    if re.match(r'if\s*\(', stmt):
+                        nested_lines = self._parse_full_conditional(stmt, indent_level)
+                        lines.extend(nested_lines)
+                    else:
+                        translated = self._translate_statement(stmt)
+                        for line in translated:
+                            cleaned = line.rstrip(';').strip()
+                            if cleaned:
+                                lines.append(f"{indent}{cleaned}")
+            
+            return lines
         
-        # Process statements
+        # Process statements normally
         for stmt in self._split_statements(body):
             stmt = stmt.strip().rstrip(';').strip()
             if not stmt:
@@ -1629,9 +1802,23 @@ from typing import Optional'''
 
         expr = self._convert_numbers(expr)
         expr = self._convert_logical_operators(expr)
+        expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
         expr = self._add_self_prefix(expr)
         return expr
+
+    def _convert_inside_expression(self, expr: str) -> str:
+        """Convert 'var inside {values}' to 'var in vsc.rangelist(values)'."""
+        # Pattern: identifier inside {values}
+        pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
+        
+        def replace_inside(match):
+            var_name = match.group(1)
+            values_str = match.group(2)
+            rangelist = self._translate_inside(values_str)
+            return f'{var_name} in vsc.rangelist({rangelist})'
+        
+        return re.sub(pattern, replace_inside, expr)
 
     @staticmethod
     def _convert_logical_operators(expr: str) -> str:
@@ -1661,18 +1848,9 @@ from typing import Optional'''
         return result
 
     def _convert_bit_slicing(self, expr: str) -> str:
-        """
-        Convert SystemVerilog bit slicing ([high:low] or [bit]) 
-        to Python shifts and masks.
-        """
+        """Convert bit slicing to shifts and masks."""
         def replace_slice(match):
-            var = match.group(1)
-            high = int(match.group(2))
-            
-            # If group(3) (the :low part) is missing, it's a single bit access [index]
-            # In that case, high and low are the same value.
-            low = int(match.group(3)) if match.group(3) is not None else high
-            
+            var, high, low = match.group(1), int(match.group(2)), int(match.group(3))
             width = high - low + 1
             mask = (1 << width) - 1
 
@@ -1684,8 +1862,7 @@ from typing import Optional'''
                 return f"({var} & 0x{mask:X})"
             return f"(({var} >> {low}) & 0x{mask:X})"
 
-        # Updated regex: (\d+) is the high bit, (?::(\d+))? is the optional :low bit
-        return re.sub(r'(\w+)\[(\d+)(?::(\d+))?\]', replace_slice, expr)
+        return re.sub(r'(\w+)\[(\d+):(\d+)\]', replace_slice, expr)
 
     @staticmethod
     def _convert_numbers(expr: str) -> str:
@@ -1694,10 +1871,14 @@ from typing import Optional'''
             base_char = match.group(2).lower()
             value = match.group(3)
             prefix_map = {'h': '0x', 'b': '0b', 'o': '0o', 'd': ''}
+            # Remove underscores from the number value only
+            value = value.replace('_', '')
             return f"{prefix_map.get(base_char, '')}{value}"
 
+        # Only convert SV number literals (N'hXX format)
         expr = re.sub(r"(\d+)'([hHbBdDoO])([0-9a-fA-F_]+)", replace_num, expr)
-        return re.sub(r'(\d)_(\d)', r'\1\2', expr)
+        # Don't remove underscores globally - they're valid in variable names!
+        return expr
 
     def _translate_inside(self, inside_body: str) -> str:
         """Translate inside body to rangelist arguments."""
@@ -1867,40 +2048,40 @@ class SVtoPyVSCTranslator:
         print("=" * 80)
         
         # Source and Output Metrics Summary
-        print("\n" + "â”€" * 80)
-        print("ðŸ“ˆ CONVERSION METRICS")
-        print("â”€" * 80)
+        print("\n" + "─" * 80)
+        print("📈 CONVERSION METRICS")
+        print("─" * 80)
         
         m = self.generator.metrics
         
         # Line counts
-        print(f"\n  ðŸ“„ Lines:")
+        print(f"\n  📄 Lines:")
         print(f"     Source SV:     {m['sv_lines']:>6}")
         print(f"     Output Python: {m['py_lines']:>6}")
         
         # Variable counts
-        print(f"\n  ðŸ“¦ Variables:")
+        print(f"\n  📦 Variables:")
         print(f"     Detected in SV:     {len(m['sv_variables']):>6}")
         print(f"     Present in Python:  {len(m['py_variables']):>6}")
         
         # Conditionals
         sv_cond = m['sv_conditionals']
         py_cond = m['py_if_then'] + m['py_else_if']
-        print(f"\n  ðŸ”€ Conditionals:")
+        print(f"\n  🔀 Conditionals:")
         print(f"     Detected (if/else if): {sv_cond:>6}")
         print(f"     Converted (if_then/else_if): {py_cond:>6}")
         
         # Logical operators
         sv_logical = m['sv_logical_and'] + m['sv_logical_or'] + m['sv_logical_not']
         py_logical = m.get('py_logical_and', 0) + m.get('py_logical_or', 0) + m.get('py_logical_not', 0)
-        print(f"\n  ðŸ”£ Logical Operators:")
-        print(f"     && detected:  {m['sv_logical_and']:>4}  â†’  'and' converted: {m.get('py_logical_and', 0):>4}")
-        print(f"     || detected:  {m['sv_logical_or']:>4}  â†’  'or' converted:  {m.get('py_logical_or', 0):>4}")
-        print(f"     !  detected:  {m['sv_logical_not']:>4}  â†’  'not' converted: {m.get('py_logical_not', 0):>4}")
-        print(f"     Total:        {sv_logical:>4}  â†’  Total:           {py_logical:>4}")
+        print(f"\n  🔣 Logical Operators:")
+        print(f"     && detected:  {m['sv_logical_and']:>4}  →  'and' converted: {m.get('py_logical_and', 0):>4}")
+        print(f"     || detected:  {m['sv_logical_or']:>4}  →  'or' converted:  {m.get('py_logical_or', 0):>4}")
+        print(f"     !  detected:  {m['sv_logical_not']:>4}  →  'not' converted: {m.get('py_logical_not', 0):>4}")
+        print(f"     Total:        {sv_logical:>4}  →  Total:           {py_logical:>4}")
         
         # Constraint constructs comparison
-        print(f"\n  ðŸŽ¯ Constraint Constructs:")
+        print(f"\n  🎯 Constraint Constructs:")
         print(f"     {'Construct':<20} {'SV Detected':>12} {'Python Generated':>18}")
         print(f"     {'-'*20} {'-'*12} {'-'*18}")
         print(f"     {'inside':<20} {m['sv_inside']:>12} {m['py_rangelist']:>18}")
@@ -1912,52 +2093,52 @@ class SVtoPyVSCTranslator:
         print(f"     {'soft':<20} {m['sv_soft']:>12} {m['py_soft']:>18}")
         
         # Special conversions
-        print(f"\n  ðŸ”§ Special Conversions:")
+        print(f"\n  🔧 Special Conversions:")
         print(f"     Bit slices detected:   {m['sv_bit_slices']:>6}")
         print(f"     Number formats (N'h):  {m['sv_number_formats']:>6}")
         
         # Basic statistics
-        print("\n" + "â”€" * 80)
-        print("ðŸ“Š TRANSLATION STATISTICS")
-        print("â”€" * 80)
+        print("\n" + "─" * 80)
+        print("📊 TRANSLATION STATISTICS")
+        print("─" * 80)
         for key, value in result.statistics.items():
-            print(f"   â€¢ {key.capitalize()}: {value}")
+            print(f"   • {key.capitalize()}: {value}")
 
         if result.mapping_notes:
-            print("\n" + "â”€" * 80)
-            print("ðŸ“ MAPPING NOTES")
-            print("â”€" * 80)
+            print("\n" + "─" * 80)
+            print("📝 MAPPING NOTES")
+            print("─" * 80)
             for note in result.mapping_notes:
-                print(f"   â€¢ {note}")
+                print(f"   • {note}")
 
         if result.warnings:
-            print("\n" + "â”€" * 80)
-            print("âš ï¸  WARNINGS")
-            print("â”€" * 80)
+            print("\n" + "─" * 80)
+            print("⚠️  WARNINGS")
+            print("─" * 80)
             for warning in result.warnings:
-                print(f"   â€¢ {warning}")
+                print(f"   • {warning}")
 
         if result.manual_review_items:
-            print("\n" + "â”€" * 80)
-            print("ðŸ” MANUAL REVIEW REQUIRED")
-            print("â”€" * 80)
+            print("\n" + "─" * 80)
+            print("🔍 MANUAL REVIEW REQUIRED")
+            print("─" * 80)
             for item in result.manual_review_items:
-                print(f"   â€¢ {item}")
+                print(f"   • {item}")
         
         # Validation summary
-        print("\n" + "â”€" * 80)
-        print("âœ… OUTPUT VALIDATION")
-        print("â”€" * 80)
-        print(f"   â€¢ if_then blocks:      {m['py_if_then']:>6}")
-        print(f"   â€¢ else_if blocks:      {m['py_else_if']:>6}")
-        print(f"   â€¢ else_then blocks:    {m['py_else_then']:>6}")
-        print(f"   â€¢ rangelist (inside):  {m['py_rangelist']:>6}")
-        print(f"   â€¢ implies:             {m['py_implies']:>6}")
-        print(f"   â€¢ dist:                {m['py_dist']:>6}")
-        print(f"   â€¢ solve_order:         {m['py_solve_order']:>6}")
-        print(f"   â€¢ foreach:             {m['py_foreach']:>6}")
-        print(f"   â€¢ unique:              {m['py_unique']:>6}")
-        print(f"   â€¢ soft:                {m['py_soft']:>6}")
+        print("\n" + "─" * 80)
+        print("✅ OUTPUT VALIDATION")
+        print("─" * 80)
+        print(f"   • if_then blocks:      {m['py_if_then']:>6}")
+        print(f"   • else_if blocks:      {m['py_else_if']:>6}")
+        print(f"   • else_then blocks:    {m['py_else_then']:>6}")
+        print(f"   • rangelist (inside):  {m['py_rangelist']:>6}")
+        print(f"   • implies:             {m['py_implies']:>6}")
+        print(f"   • dist:                {m['py_dist']:>6}")
+        print(f"   • solve_order:         {m['py_solve_order']:>6}")
+        print(f"   • foreach:             {m['py_foreach']:>6}")
+        print(f"   • unique:              {m['py_unique']:>6}")
+        print(f"   • soft:                {m['py_soft']:>6}")
 
         print("\n" + "=" * 80)
 
@@ -1971,13 +2152,13 @@ def main():
         description='SystemVerilog to pyvsc Translation Assistant',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent('''
-            Examples:
-              %(prog)s                          # Translate example_sv_classes.sv
-              %(prog)s input.sv                 # Translate input.sv
-              %(prog)s input.sv -o output.py    # Translate and save to file
-              %(prog)s -o output.py -r          # Translate default file with report
+            Default behavior:
+              %(prog)s                     -> input.sv → output.py
 
-            Note: This tool generates SUGGESTED translations that require manual review.
+            Examples:
+              %(prog)s input.sv
+              %(prog)s input.sv -o out.py
+              %(prog)s -r
         ''')
     )
 
@@ -1987,11 +2168,23 @@ def main():
         default='example_sv_classes.sv',
         help='Input SystemVerilog file (default: example_sv_classes.sv)'
     )
-    parser.add_argument('-o', '--output', help='Output Python file')
+
+    parser.add_argument(
+        '-o', '--output',
+        default='example_sv_classes.py',
+        help='Output Python file (default: example_sv_classes.py)'
+    )
+
+
     parser.add_argument('-r', '--report', action='store_true', help='Print translation report')
-    parser.add_argument('-q', '--quiet', action='store_true', help='Suppress code output (use with -o)')
+    parser.add_argument('-q', '--quiet', action='store_true', help='Suppress code output')
 
     args = parser.parse_args()
+
+    # Default behavior: input.sv -o output.py (no stdout)
+    used_default_output = args.output == 'output.py' and '-o' not in sys.argv
+    if used_default_output:
+        args.quiet = True
 
     translator = SVtoPyVSCTranslator()
 
@@ -2013,4 +2206,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
