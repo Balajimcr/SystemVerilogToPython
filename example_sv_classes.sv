@@ -1,247 +1,129 @@
-// =============================================================================
-// Example 1: Basic Transaction Class
-// =============================================================================
+// ============================================================
+// Small representative SV test based on real Isp_rand_item
+// ============================================================
 
-class basic_transaction;
-    rand bit [7:0]  addr;
-    rand bit [31:0] data;
-    rand bit [3:0]  burst_len;
-         bit [1:0]  fixed_mode;
-    
-    randc bit [3:0] cyclic_val;
-    
-    constraint addr_range_c {
-        addr inside {[8'h10:8'hF0]};
-    }
-    
-    constraint data_c {
-        addr < 8'h20 -> data == 32'h0;
-    }
-    
-    constraint burst_c {
-        burst_len inside {[1:8]};
-    }
-endclass
+class Isp_rand_item_small extends uvm_sequence_item;
 
+    // --------------------------------------------------------
+    // Core control fields
+    // --------------------------------------------------------
+    rand bit [31:0] IsIspBypassMode;
+    rand bit [31:0] IsIspYuvFormat;
+    rand bit [31:0] IsIspSrcCompType;
+    rand bit [31:0] IsIspDstCompType;
+    rand bit [31:0] IsIspInBittageType;
+    rand bit [31:0] IsIspOutBittageType;
 
-// =============================================================================
-// Example 2: AXI-like Transaction with Enums
-// =============================================================================
+    rand bit [31:0] IsRdmaDataFormatYuv;
+    rand bit [31:0] IsWdmaDataFormatYuv;
 
-typedef enum bit [1:0] {
-    FIXED  = 2'b00,
-    INCR   = 2'b01,
-    WRAP   = 2'b10
-} burst_type_e;
+    // --------------------------------------------------------
+    // UVM registration (kept minimal)
+    // --------------------------------------------------------
+    `uvm_object_utils_begin(Isp_rand_item_small)
+        `uvm_field_int(IsIspBypassMode,        UVM_DEFAULT)
+        `uvm_field_int(IsIspYuvFormat,         UVM_DEFAULT)
+        `uvm_field_int(IsIspSrcCompType,       UVM_DEFAULT)
+        `uvm_field_int(IsIspDstCompType,       UVM_DEFAULT)
+        `uvm_field_int(IsIspInBittageType,     UVM_DEFAULT)
+        `uvm_field_int(IsIspOutBittageType,    UVM_DEFAULT)
+        `uvm_field_int(IsRdmaDataFormatYuv,    UVM_DEFAULT)
+        `uvm_field_int(IsWdmaDataFormatYuv,    UVM_DEFAULT)
+    `uvm_object_utils_end
 
-typedef enum bit [3:0] {
-    READ   = 4'h0,
-    WRITE  = 4'h1,
-    IDLE   = 4'h2
-} cmd_type_e;
+    // --------------------------------------------------------
+    // Basic range constraints (from real code)
+    // --------------------------------------------------------
 
-class axi_transaction;
-    rand bit [31:0]     addr;
-    rand bit [7:0]      data[];
-    rand bit [2:0]      size;
-    rand bit [7:0]      len;
-    rand burst_type_e   burst;
-    rand cmd_type_e     cmd;
-    rand bit            write;
-    
-    constraint valid_size_c {
-        size inside {[0:3]};
+    constraint CR_VAR_RANGE_IsIspBypassMode {
+        IsIspBypassMode >= 0 && IsIspBypassMode <= 1;
     }
-    
-    constraint data_size_c {
-        data.size() == (len + 1);
-    }
-    
-    constraint addr_align_c {
-        (addr % (1 << size)) == 0;
-    }
-    
-    constraint wrap_c {
-        (burst == WRAP) -> (len inside {1, 3, 7, 15});
-    }
-    
-    constraint len_dist_c {
-        len inside {[0:15]};
-        len dist {
-            [0:3]   := 60,
-            [4:7]   := 25,
-            [8:15]  := 15
-        };
-    }
-    
-    constraint burst_dist_c {
-        burst dist {
-            INCR  := 70,
-            FIXED := 20,
-            WRAP  := 10
-        };
-    }
-    
-    constraint solve_order_c {
-        solve burst before len;
-        solve len before data;
-    }
-endclass
 
+    constraint CR_VAR_RANGE_IsIspYuvFormat {
+        IsIspYuvFormat >= 0 && IsIspYuvFormat <= 1;
+    }
 
-// =============================================================================
-// Example 3: Protocol Packet with Complex Constraints
-// =============================================================================
+    constraint CR_VAR_RANGE_IsIspSrcCompType {
+        IsIspSrcCompType >= 0 && IsIspSrcCompType <= 2;
+    }
 
-typedef enum bit [3:0] {
-    PKT_DATA    = 4'h0,
-    PKT_ACK     = 4'h1,
-    PKT_NACK    = 4'h2,
-    PKT_CTRL    = 4'h3,
-    PKT_STATUS  = 4'h4
-} pkt_type_e;
+    constraint CR_VAR_RANGE_IsIspDstCompType {
+        IsIspDstCompType >= 0 && IsIspDstCompType <= 2;
+    }
 
-class protocol_packet;
-    rand pkt_type_e   pkt_type;
-    rand bit [15:0]   seq_num;
-    rand bit [7:0]    payload[];
-    rand bit [7:0]    src_id;
-    rand bit [7:0]    dst_id;
-    rand bit          priority;
-    rand bit [15:0]   flags;
-    
-    constraint solve_order_c {
-        solve pkt_type before payload;
-        solve pkt_type before flags;
+    constraint CR_VAR_RANGE_IsIspInBittageType {
+        IsIspInBittageType >= 0 && IsIspInBittageType <= 3;
     }
-    
-    constraint payload_size_c {
-        if (pkt_type == PKT_DATA) {
-            payload.size() inside {[64:256]};
-        } else if (pkt_type == PKT_CTRL) {
-            payload.size() inside {[8:64]};
-        } else {
-            payload.size() == 0;
-        }
-    }
-    
-    constraint flags_c {
-        if (pkt_type == PKT_ACK || pkt_type == PKT_NACK) {
-            flags[0] == 1;
-        } else {
-            flags[0] == 0;
-        }
-        
-        priority -> flags[1];
-    }
-    
-    constraint id_c {
-        src_id != dst_id;
-        src_id inside {[1:254]};
-        dst_id inside {[1:254]};
-    }
-    
-    constraint type_dist_c {
-        pkt_type dist {
-            PKT_DATA   := 50,
-            PKT_ACK    := 20,
-            PKT_NACK   := 5,
-            PKT_CTRL   := 15,
-            PKT_STATUS := 10
-        };
-    }
-endclass
 
+    constraint CR_VAR_RANGE_IsIspOutBittageType {
+        IsIspOutBittageType >= 0 && IsIspOutBittageType <= 3;
+    }
 
-// =============================================================================
-// Example 4: Array and Foreach Constraints
-// =============================================================================
+    // --------------------------------------------------------
+    // Conditional + inside + solve-order (cr1 equivalent)
+    // --------------------------------------------------------
 
-class array_example;
-    rand bit [7:0] data_arr[16];
-    rand bit [3:0] index_arr[8];
-    rand int       values[];
-    
-    constraint arr_size_c {
-        values.size() inside {[4:16]};
-    }
-    
-    constraint foreach_c {
-        foreach (data_arr[i]) {
-            data_arr[i] > i;
-            data_arr[i] < 200;
-        }
-    }
-    
-    constraint ascending_c {
-        foreach (data_arr[i]) {
-            if (i > 0) {
-                data_arr[i] > data_arr[i-1];
-            }
-        }
-    }
-    
-    constraint unique_c {
-        unique {index_arr};
-    }
-    
-    constraint index_range_c {
-        foreach (index_arr[i]) {
-            index_arr[i] inside {[0:15]};
-        }
-    }
-endclass
+    constraint cr1 {
+        if (IsRdmaDataFormatYuv inside {4, 5, 16, 17, 20, 21})
+            IsIspYuvFormat == 0;
+        else
+            IsIspYuvFormat == 1;
 
-
-// =============================================================================
-// Example 5: Inheritance Example
-// =============================================================================
-
-class base_transaction;
-    rand bit [7:0]  addr;
-    rand bit [31:0] data;
-    
-    constraint base_addr_c {
-        addr inside {[0:127]};
+        solve IsRdmaDataFormatYuv before IsIspYuvFormat;
     }
-endclass
 
-class extended_transaction extends base_transaction;
-    rand bit [3:0] burst_len;
-    rand bit       enable;
-    
-    constraint ext_addr_c {
-        addr inside {[64:127]};
-    }
-    
-    constraint burst_c {
-        burst_len inside {[1:8]};
-        (burst_len > 4) -> (addr[6:0] == 0);
-    }
-    
-    constraint enable_c {
-        enable -> (data != 0);
-    }
-endclass
+    // --------------------------------------------------------
+    // Conditional + inside + solve-order (cr4 equivalent)
+    // --------------------------------------------------------
 
+    constraint cr4 {
+        if (IsIspBypassMode)
+            IsIspSrcCompType inside {0, 1};
 
-// =============================================================================
-// Example 6: Soft Constraints
-// =============================================================================
+        solve IsIspBypassMode before IsIspSrcCompType;
+    }
 
-class soft_example;
-    rand bit [7:0] addr;
-    rand bit [7:0] data;
-    rand bit [1:0] mode;
-    
-    constraint hard_c {
-        addr inside {[0:255]};
-        data inside {[0:255]};
+    // --------------------------------------------------------
+    // Equality dependency + solve-order (cr5 equivalent)
+    // --------------------------------------------------------
+
+    constraint cr5 {
+        if (IsIspBypassMode)
+            IsIspDstCompType == IsIspSrcCompType;
+
+        solve IsIspBypassMode before IsIspDstCompType;
+        solve IsIspSrcCompType before IsIspDstCompType;
     }
-    
-    constraint soft_defaults_c {
-        soft addr == 8'h00;
-        soft data == 8'hFF;
-        soft mode == 2'b00;
+
+    // --------------------------------------------------------
+    // Multi-branch conditional + solve-order (cr6 equivalent)
+    // --------------------------------------------------------
+
+    constraint cr6 {
+        if (IsRdmaDataFormatYuv inside {4, 5, 7, 8})
+            IsIspInBittageType == 0;
+        else if (IsRdmaDataFormatYuv inside {16, 17, 32, 33})
+            IsIspInBittageType == 1;
+        else
+            IsIspInBittageType == 3;
+
+        solve IsRdmaDataFormatYuv before IsIspInBittageType;
     }
+
+    // --------------------------------------------------------
+    // Cascaded dependency (cr7 equivalent)
+    // --------------------------------------------------------
+
+    constraint cr7 {
+        if (IsIspInBittageType == 0)
+            IsIspOutBittageType == 0;
+        else if (IsIspDstCompType > 0)
+            IsIspOutBittageType == 1;
+        else
+            IsIspOutBittageType inside {1, 3};
+
+        solve IsIspInBittageType before IsIspOutBittageType;
+        solve IsIspDstCompType before IsIspOutBittageType;
+    }
+
 endclass

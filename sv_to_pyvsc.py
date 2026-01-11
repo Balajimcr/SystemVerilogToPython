@@ -8,7 +8,7 @@ classes and generating suggested pyvsc equivalents.
 IMPORTANT: This is a translation ASSISTANT, not an automated converter.
 All generated code should be reviewed and validated by a verification engineer.
 
-Author: Algorithm Architect
+Author: Balaji R
 Version: 1.1.0
 """
 
@@ -222,48 +222,35 @@ class SVParser:
         return classes
 
     def _extract_fields(self, class_body: str) -> List[SVField]:
-        """Extract field declarations from class body."""
+        """Extract field declarations while ignoring constraint/function blocks."""
         fields = []
+        
+        # Strip constraint blocks and functions to avoid mis-parsing their contents as fields
+        # This handles nested braces within constraints to ensure the entire block is removed
+        clean_body = re.sub(r'constraint\s+\w+\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', '', class_body, flags=re.DOTALL)
+        clean_body = re.sub(r'function\s+.*?endfunction', '', clean_body, flags=re.DOTALL)
+
         patterns = [
-            # rand/randc bit/logic [N:0] name [array]
             r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
-            # rand/randc int/byte/shortint/longint [unsigned] name
             r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(unsigned))?\s+(\w+)\s*;',
-            # rand/randc enum_type name
             r'(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*;',
         ]
 
-        for line in class_body.split(';'):
+        seen_names = set()
+
+        for line in clean_body.split(';'):
             line = line.strip()
-            if not line:
-                continue
-
-            # Handle comma-separated field declarations: rand bit [7:0] a, b, c;
-            comma_match = re.match(r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)', line)
-            if comma_match:
-                rand_type, data_type, width_str, names_str = comma_match.groups()
-                width = int(width_str) + 1 if width_str else 1
-                field_type = {'rand': FieldType.RAND, 'randc': FieldType.RANDC}.get(rand_type, FieldType.NON_RAND)
-                
-                for name in names_str.split(','):
-                    name = name.strip()
-                    if name:
-                        fields.append(SVField(
-                            name=name, width=width, field_type=field_type,
-                            original_line=f"{rand_type or ''} {data_type} [{width-1}:0] {name};".strip(),
-                            data_type=data_type
-                        ))
-                continue
-
-            # Try each standard pattern
+            if not line: continue 
+            
             for pattern in patterns:
                 match = re.search(pattern, line + ';')
                 if match:
                     parsed = self._parse_field_match(match.groups(), line + ';')
-                    if parsed:
+                    # Prevent duplicate entries in __init__
+                    if parsed and parsed.name not in seen_names:
                         fields.append(parsed)
+                        seen_names.add(parsed.name)
                     break
-
         return fields
 
     def _parse_field_match(self, groups: tuple, original: str) -> Optional[SVField]:
@@ -887,12 +874,26 @@ from typing import Optional'''
         elif fld.data_type == 'int':
             return "vsc.int32_t()"
         return f"vsc.bit_t({fld.width})"
-
     def _generate_constraint(self, constraint: SVConstraint) -> List[str]:
-        """Generate pyvsc constraint from SV constraint."""
+        """
+        Generate pyvsc constraint from SV constraint with variable validation.
+        """
         # Calculate per-constraint metrics
+        # This now includes 'sv_var_list' from our updated metrics function
         metrics = self._calculate_constraint_metrics(constraint.body)
         
+        # Translate the body into Python lines
+        body_lines = self._translate_constraint_body(constraint.body)
+        translated_text = "\n".join(body_lines)
+        
+        # Identify variables that are in the SV source but missing from the Python output
+        # We check for the presence of 'self.var_name' specifically
+        missing_vars = [
+            v for v in metrics.get('sv_var_list', []) 
+            if f"self.{v}" not in translated_text and v not in translated_text
+        ]
+        
+        # Start building the Python method
         lines = [
             f"{self.INDENT}@vsc.constraint",
             f"{self.INDENT}def {constraint.name}(self):",
@@ -900,6 +901,7 @@ from typing import Optional'''
             f'{self.INDENT}{self.INDENT}Original SV constraint:',
         ]
 
+        # Preserve original SV lines in the docstring
         for orig_line in constraint.body.split('\n'):
             if orig_line.strip():
                 lines.append(f'{self.INDENT}{self.INDENT}{orig_line.strip()}')
@@ -909,15 +911,21 @@ from typing import Optional'''
         lines.append(f'{self.INDENT}{self.INDENT}--- Constraint Metrics ---')
         lines.append(f'{self.INDENT}{self.INDENT}Lines: {metrics["lines"]} | Variables: {metrics["variables"]}')
         
-        # Conditionals
+        # --- NEW ERROR REPORTING ---
+        if missing_vars:
+            error_msg = f"ERROR: Missing variables in output: {', '.join(missing_vars)}"
+            lines.append(f'{self.INDENT}{self.INDENT}{error_msg}')
+            self._add_warning(f"Constraint '{constraint.name}': {error_msg}")
+        
+        # Original Metrics: Conditionals
         if metrics['conditionals'] > 0:
             lines.append(f'{self.INDENT}{self.INDENT}Conditionals: {metrics["conditionals"]} (if: {metrics["if_count"]}, else-if: {metrics["else_if_count"]})')
         
-        # Logical operators
+        # Original Metrics: Logical operators
         if metrics['logical_total'] > 0:
             lines.append(f'{self.INDENT}{self.INDENT}Logical Ops: {metrics["logical_total"]} (&&: {metrics["and_count"]}, ||: {metrics["or_count"]}, !: {metrics["not_count"]})')
         
-        # Constraint constructs
+        # Original Metrics: Constraint constructs
         constructs = []
         if metrics['inside_count'] > 0:
             constructs.append(f'inside: {metrics["inside_count"]}')
@@ -937,7 +945,7 @@ from typing import Optional'''
         if constructs:
             lines.append(f'{self.INDENT}{self.INDENT}Constructs: {", ".join(constructs)}')
         
-        # Special items
+        # Original Metrics: Special items
         specials = []
         if metrics['bit_slices'] > 0:
             specials.append(f'bit_slices: {metrics["bit_slices"]}')
@@ -947,9 +955,10 @@ from typing import Optional'''
         if specials:
             lines.append(f'{self.INDENT}{self.INDENT}Special: {", ".join(specials)}')
         
+        # Close the docstring
         lines.append(f'{self.INDENT}{self.INDENT}"""')
 
-        body_lines = self._translate_constraint_body(constraint.body)
+        # Append the translated Python logic
         if body_lines:
             for line in body_lines:
                 lines.append(f"{self.INDENT}{self.INDENT}{line}")
@@ -959,11 +968,15 @@ from typing import Optional'''
 
         return lines
 
-    def _calculate_constraint_metrics(self, body: str) -> Dict[str, int]:
-        """Calculate metrics for a single constraint body."""
+    def _calculate_constraint_metrics(self, body: str) -> Dict[str, any]:
+        """
+        Calculate comprehensive metrics for a single constraint body,
+        including a list of all variables for validation.
+        """
         metrics = {
             'lines': len([l for l in body.split('\n') if l.strip()]),
             'variables': 0,
+            'sv_var_list': [], # Added to track actual variable names for cross-validation
             'conditionals': 0,
             'if_count': 0,
             'else_if_count': 0,
@@ -1003,15 +1016,21 @@ from typing import Optional'''
         metrics['soft_count'] = len(re.findall(r'\bsoft\s+', body))
         
         # Count special items
-        metrics['bit_slices'] = len(re.findall(r'\w+\[\d+:\d+\]', body))
+        # Updated bit_slices to detect single index [0] and range [7:0]
+        metrics['bit_slices'] = len(re.findall(r'\w+\[\d+(?::\d+)?\]', body))
         metrics['number_formats'] = len(re.findall(r"\d+'[hHbBdDoO]", body))
         
-        # Count variables (unique identifiers excluding keywords)
-        sv_keywords = {'if', 'else', 'inside', 'dist', 'solve', 'before', 
-                      'foreach', 'unique', 'soft', 'constraint', 'rand',
-                      'randc', 'bit', 'logic', 'int', 'byte', 'size'}
+        # Identify and track all unique variables (identifiers excluding keywords)
+        sv_keywords = {
+            'if', 'else', 'inside', 'dist', 'solve', 'before', 
+            'foreach', 'unique', 'soft', 'constraint', 'rand',
+            'randc', 'bit', 'logic', 'int', 'byte', 'size', 'solve', 'before'
+        }
         identifiers = set(re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', body))
-        metrics['variables'] = len(identifiers - sv_keywords)
+        sv_vars = identifiers - sv_keywords
+        
+        metrics['sv_var_list'] = sorted(list(sv_vars)) # Store sorted list for stable reporting
+        metrics['variables'] = len(sv_vars)
         
         return metrics
 
@@ -1024,53 +1043,49 @@ from typing import Optional'''
         return lines
 
     @staticmethod
-    def _split_statements(body: str) -> List[str]:
-        """Split constraint body into individual statements."""
+    def _split_statements(self, body: str) -> List[str]:
+        """
+        Enhanced statement splitter that preserves sibling statements 
+        appearing after braced blocks (if/else).
+        """
         statements = []
         current = ""
         brace_depth = 0
-        paren_depth = 0
         i = 0
         
         while i < len(body):
             char = body[i]
             
-            if char == '{':
+            # Track brace nesting depth
+            if char == '{': 
                 brace_depth += 1
-                current += char
-            elif char == '}':
+            elif char == '}': 
                 brace_depth -= 1
-                current += char
-                
-                # If we just closed the outermost brace, this might be end of a block statement
-                if brace_depth == 0 and paren_depth == 0:
-                    # Check if this is an if/else block by looking for else after
+            
+            current += char
+            
+            # When we are back at the top-level scope (brace_depth 0)
+            if brace_depth == 0:
+                # 1. Standard semicolon statement end
+                if char == ';':
+                    if current.strip():
+                        statements.append(current.strip())
+                    current = ""
+                # 2. End of a braced block (like an if-statement)
+                elif char == '}':
+                    # Peek at the remaining text to see if an 'else' follows
                     remaining = body[i+1:].lstrip()
                     if not remaining.startswith('else'):
-                        # End of block statement - save it
+                        # No else follows; this is a complete standalone block
                         if current.strip():
                             statements.append(current.strip())
                         current = ""
-            elif char == '(':
-                paren_depth += 1
-                current += char
-            elif char == ')':
-                paren_depth -= 1
-                current += char
-            elif char == ';' and brace_depth == 0 and paren_depth == 0:
-                current += char
-                if current.strip():
-                    statements.append(current.strip())
-                current = ""
-            else:
-                current += char
-            
             i += 1
         
-        # Don't forget any remaining content
+        # Catch any final remaining text
         if current.strip():
             statements.append(current.strip())
-        
+            
         return statements
 
     def _translate_statement(self, stmt: str) -> List[str]:
@@ -1646,9 +1661,18 @@ from typing import Optional'''
         return result
 
     def _convert_bit_slicing(self, expr: str) -> str:
-        """Convert bit slicing to shifts and masks."""
+        """
+        Convert SystemVerilog bit slicing ([high:low] or [bit]) 
+        to Python shifts and masks.
+        """
         def replace_slice(match):
-            var, high, low = match.group(1), int(match.group(2)), int(match.group(3))
+            var = match.group(1)
+            high = int(match.group(2))
+            
+            # If group(3) (the :low part) is missing, it's a single bit access [index]
+            # In that case, high and low are the same value.
+            low = int(match.group(3)) if match.group(3) is not None else high
+            
             width = high - low + 1
             mask = (1 << width) - 1
 
@@ -1660,7 +1684,8 @@ from typing import Optional'''
                 return f"({var} & 0x{mask:X})"
             return f"(({var} >> {low}) & 0x{mask:X})"
 
-        return re.sub(r'(\w+)\[(\d+):(\d+)\]', replace_slice, expr)
+        # Updated regex: (\d+) is the high bit, (?::(\d+))? is the optional :low bit
+        return re.sub(r'(\w+)\[(\d+)(?::(\d+))?\]', replace_slice, expr)
 
     @staticmethod
     def _convert_numbers(expr: str) -> str:
@@ -1842,40 +1867,40 @@ class SVtoPyVSCTranslator:
         print("=" * 80)
         
         # Source and Output Metrics Summary
-        print("\n" + "─" * 80)
-        print("📈 CONVERSION METRICS")
-        print("─" * 80)
+        print("\n" + "â”€" * 80)
+        print("ðŸ“ˆ CONVERSION METRICS")
+        print("â”€" * 80)
         
         m = self.generator.metrics
         
         # Line counts
-        print(f"\n  📄 Lines:")
+        print(f"\n  ðŸ“„ Lines:")
         print(f"     Source SV:     {m['sv_lines']:>6}")
         print(f"     Output Python: {m['py_lines']:>6}")
         
         # Variable counts
-        print(f"\n  📦 Variables:")
+        print(f"\n  ðŸ“¦ Variables:")
         print(f"     Detected in SV:     {len(m['sv_variables']):>6}")
         print(f"     Present in Python:  {len(m['py_variables']):>6}")
         
         # Conditionals
         sv_cond = m['sv_conditionals']
         py_cond = m['py_if_then'] + m['py_else_if']
-        print(f"\n  🔀 Conditionals:")
+        print(f"\n  ðŸ”€ Conditionals:")
         print(f"     Detected (if/else if): {sv_cond:>6}")
         print(f"     Converted (if_then/else_if): {py_cond:>6}")
         
         # Logical operators
         sv_logical = m['sv_logical_and'] + m['sv_logical_or'] + m['sv_logical_not']
         py_logical = m.get('py_logical_and', 0) + m.get('py_logical_or', 0) + m.get('py_logical_not', 0)
-        print(f"\n  🔣 Logical Operators:")
-        print(f"     && detected:  {m['sv_logical_and']:>4}  →  'and' converted: {m.get('py_logical_and', 0):>4}")
-        print(f"     || detected:  {m['sv_logical_or']:>4}  →  'or' converted:  {m.get('py_logical_or', 0):>4}")
-        print(f"     !  detected:  {m['sv_logical_not']:>4}  →  'not' converted: {m.get('py_logical_not', 0):>4}")
-        print(f"     Total:        {sv_logical:>4}  →  Total:           {py_logical:>4}")
+        print(f"\n  ðŸ”£ Logical Operators:")
+        print(f"     && detected:  {m['sv_logical_and']:>4}  â†’  'and' converted: {m.get('py_logical_and', 0):>4}")
+        print(f"     || detected:  {m['sv_logical_or']:>4}  â†’  'or' converted:  {m.get('py_logical_or', 0):>4}")
+        print(f"     !  detected:  {m['sv_logical_not']:>4}  â†’  'not' converted: {m.get('py_logical_not', 0):>4}")
+        print(f"     Total:        {sv_logical:>4}  â†’  Total:           {py_logical:>4}")
         
         # Constraint constructs comparison
-        print(f"\n  🎯 Constraint Constructs:")
+        print(f"\n  ðŸŽ¯ Constraint Constructs:")
         print(f"     {'Construct':<20} {'SV Detected':>12} {'Python Generated':>18}")
         print(f"     {'-'*20} {'-'*12} {'-'*18}")
         print(f"     {'inside':<20} {m['sv_inside']:>12} {m['py_rangelist']:>18}")
@@ -1887,52 +1912,52 @@ class SVtoPyVSCTranslator:
         print(f"     {'soft':<20} {m['sv_soft']:>12} {m['py_soft']:>18}")
         
         # Special conversions
-        print(f"\n  🔧 Special Conversions:")
+        print(f"\n  ðŸ”§ Special Conversions:")
         print(f"     Bit slices detected:   {m['sv_bit_slices']:>6}")
         print(f"     Number formats (N'h):  {m['sv_number_formats']:>6}")
         
         # Basic statistics
-        print("\n" + "─" * 80)
-        print("📊 TRANSLATION STATISTICS")
-        print("─" * 80)
+        print("\n" + "â”€" * 80)
+        print("ðŸ“Š TRANSLATION STATISTICS")
+        print("â”€" * 80)
         for key, value in result.statistics.items():
-            print(f"   • {key.capitalize()}: {value}")
+            print(f"   â€¢ {key.capitalize()}: {value}")
 
         if result.mapping_notes:
-            print("\n" + "─" * 80)
-            print("📝 MAPPING NOTES")
-            print("─" * 80)
+            print("\n" + "â”€" * 80)
+            print("ðŸ“ MAPPING NOTES")
+            print("â”€" * 80)
             for note in result.mapping_notes:
-                print(f"   • {note}")
+                print(f"   â€¢ {note}")
 
         if result.warnings:
-            print("\n" + "─" * 80)
-            print("⚠️  WARNINGS")
-            print("─" * 80)
+            print("\n" + "â”€" * 80)
+            print("âš ï¸  WARNINGS")
+            print("â”€" * 80)
             for warning in result.warnings:
-                print(f"   • {warning}")
+                print(f"   â€¢ {warning}")
 
         if result.manual_review_items:
-            print("\n" + "─" * 80)
-            print("🔍 MANUAL REVIEW REQUIRED")
-            print("─" * 80)
+            print("\n" + "â”€" * 80)
+            print("ðŸ” MANUAL REVIEW REQUIRED")
+            print("â”€" * 80)
             for item in result.manual_review_items:
-                print(f"   • {item}")
+                print(f"   â€¢ {item}")
         
         # Validation summary
-        print("\n" + "─" * 80)
-        print("✅ OUTPUT VALIDATION")
-        print("─" * 80)
-        print(f"   • if_then blocks:      {m['py_if_then']:>6}")
-        print(f"   • else_if blocks:      {m['py_else_if']:>6}")
-        print(f"   • else_then blocks:    {m['py_else_then']:>6}")
-        print(f"   • rangelist (inside):  {m['py_rangelist']:>6}")
-        print(f"   • implies:             {m['py_implies']:>6}")
-        print(f"   • dist:                {m['py_dist']:>6}")
-        print(f"   • solve_order:         {m['py_solve_order']:>6}")
-        print(f"   • foreach:             {m['py_foreach']:>6}")
-        print(f"   • unique:              {m['py_unique']:>6}")
-        print(f"   • soft:                {m['py_soft']:>6}")
+        print("\n" + "â”€" * 80)
+        print("âœ… OUTPUT VALIDATION")
+        print("â”€" * 80)
+        print(f"   â€¢ if_then blocks:      {m['py_if_then']:>6}")
+        print(f"   â€¢ else_if blocks:      {m['py_else_if']:>6}")
+        print(f"   â€¢ else_then blocks:    {m['py_else_then']:>6}")
+        print(f"   â€¢ rangelist (inside):  {m['py_rangelist']:>6}")
+        print(f"   â€¢ implies:             {m['py_implies']:>6}")
+        print(f"   â€¢ dist:                {m['py_dist']:>6}")
+        print(f"   â€¢ solve_order:         {m['py_solve_order']:>6}")
+        print(f"   â€¢ foreach:             {m['py_foreach']:>6}")
+        print(f"   â€¢ unique:              {m['py_unique']:>6}")
+        print(f"   â€¢ soft:                {m['py_soft']:>6}")
 
         print("\n" + "=" * 80)
 
@@ -1940,7 +1965,6 @@ class SVtoPyVSCTranslator:
 # =============================================================================
 # CLI INTERFACE
 # =============================================================================
-
 def main():
     """Main entry point for CLI usage."""
     parser = argparse.ArgumentParser(
@@ -1948,15 +1972,21 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent('''
             Examples:
-              %(prog)s input.sv                    # Translate and print to stdout
-              %(prog)s input.sv -o output.py       # Translate and save to file
-              %(prog)s input.sv -o output.py -r    # Translate with report
+              %(prog)s                          # Translate example_sv_classes.sv
+              %(prog)s input.sv                 # Translate input.sv
+              %(prog)s input.sv -o output.py    # Translate and save to file
+              %(prog)s -o output.py -r          # Translate default file with report
 
             Note: This tool generates SUGGESTED translations that require manual review.
         ''')
     )
 
-    parser.add_argument('input', help='Input SystemVerilog file')
+    parser.add_argument(
+        'input',
+        nargs='?',
+        default='example_sv_classes.sv',
+        help='Input SystemVerilog file (default: example_sv_classes.sv)'
+    )
     parser.add_argument('-o', '--output', help='Output Python file')
     parser.add_argument('-r', '--report', action='store_true', help='Print translation report')
     parser.add_argument('-q', '--quiet', action='store_true', help='Suppress code output (use with -o)')
@@ -1983,3 +2013,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
