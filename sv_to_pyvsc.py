@@ -516,6 +516,19 @@ class PyVSCGenerator:
                     code_parts.append(self._generate_enum(enum))
                     self.statistics['enums'] += 1
 
+        # Collect all defined class names and parent classes
+        defined_classes = {sv_class.name for sv_class in sv_classes}
+        parent_classes = set()
+        for sv_class in sv_classes:
+            if sv_class.parent_class and sv_class.parent_class not in defined_classes:
+                parent_classes.add(sv_class.parent_class)
+        
+        # Generate stub base classes for undefined parent classes
+        if parent_classes:
+            stub_code = self._generate_base_class_stubs(parent_classes)
+            if stub_code:
+                code_parts.append(stub_code)
+
         # Generate classes
         for sv_class in sv_classes:
             class_code = self._generate_class(sv_class)
@@ -547,6 +560,34 @@ class PyVSCGenerator:
             mapping_notes=self.mapping_notes,
             statistics=self.statistics
         )
+
+    def _generate_base_class_stubs(self, parent_classes: Set[str]) -> str:
+        """Generate stub classes for undefined parent classes (like UVM base classes)."""
+        lines = [
+            "# =============================================================================",
+            "# BASE CLASS STUBS (from UVM or other libraries)",
+            "# Replace these with actual implementations or imports as needed",
+            "# =============================================================================",
+            "",
+        ]
+        
+        for parent in sorted(parent_classes):
+            py_name = self._to_python_class_name(parent)
+            lines.extend([
+                "@vsc.randobj",
+                f"class {py_name}:",
+                f'{self.INDENT}"""',
+                f'{self.INDENT}Stub for {parent} base class.',
+                f'{self.INDENT}Replace with actual implementation or import from your UVM library.',
+                f'{self.INDENT}"""',
+                f"{self.INDENT}def __init__(self):",
+                f"{self.INDENT}{self.INDENT}pass  # TODO: Add base class fields if needed",
+                "",
+            ])
+            self._add_review_item(f"Base class '{parent}' stub generated - replace with actual implementation")
+            self.mapping_notes.append(f"Generated stub for base class '{parent}' -> '{py_name}'")
+        
+        return '\n'.join(lines)
 
     def _validate_generated_code(self, sv_class: SVClass, generated_code: str) -> List[str]:
         """Validate that generated code contains all expected elements."""
@@ -1805,6 +1846,75 @@ from typing import Optional'''
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
         expr = self._add_self_prefix(expr)
+        expr = self._convert_bare_conditions(expr)
+        return expr
+
+    def _convert_bare_conditions(self, expr: str) -> str:
+        """Convert bare variable conditions to PyVSC-compatible comparisons.
+        
+        PyVSC doesn't support True/False or bare variables in conditions.
+        Convert: self.var -> (self.var != 0)
+        Convert: not self.var -> (self.var == 0)
+        """
+        # Don't convert if it already has a comparison operator
+        if any(op in expr for op in ['==', '!=', '<', '>', '<=', '>=']):
+            return expr
+        
+        # Don't convert if it's a rangelist or other vsc construct
+        if 'vsc.' in expr and 'in vsc.rangelist' not in expr:
+            return expr
+        
+        # Handle 'in vsc.rangelist' - this is already a valid constraint
+        if 'in vsc.rangelist' in expr:
+            return expr
+        
+        # Handle 'not self.var' -> '(self.var == 0)'
+        not_match = re.match(r'^not\s+(self\.\w+)$', expr.strip())
+        if not_match:
+            return f'({not_match.group(1)} == 0)'
+        
+        # Handle bare 'self.var' -> '(self.var != 0)'
+        bare_var_match = re.match(r'^(self\.\w+)$', expr.strip())
+        if bare_var_match:
+            return f'({bare_var_match.group(1)} != 0)'
+        
+        # Handle logical expressions with bare variables
+        # e.g., "self.a and self.b" -> "(self.a != 0) and (self.b != 0)"
+        if ' and ' in expr or ' or ' in expr:
+            def convert_term(term):
+                term = term.strip()
+                # Skip if already has comparison
+                if any(op in term for op in ['==', '!=', '<', '>', '<=', '>=']):
+                    return term
+                # Skip vsc constructs
+                if 'vsc.' in term:
+                    return term
+                # Handle 'not self.var'
+                not_m = re.match(r'^not\s+(self\.\w+)$', term)
+                if not_m:
+                    return f'({not_m.group(1)} == 0)'
+                # Handle bare 'self.var'
+                bare_m = re.match(r'^(self\.\w+)$', term)
+                if bare_m:
+                    return f'({bare_m.group(1)} != 0)'
+                # Handle parenthesized expressions
+                if term.startswith('(') and term.endswith(')'):
+                    inner = term[1:-1]
+                    converted = convert_term(inner)
+                    if converted != inner:
+                        return f'({converted})'
+                return term
+            
+            # Split on 'and' and 'or' while preserving them
+            parts = re.split(r'(\s+and\s+|\s+or\s+)', expr)
+            converted_parts = []
+            for part in parts:
+                if part.strip() in ['and', 'or'] or re.match(r'^\s+(and|or)\s+$', part):
+                    converted_parts.append(part)
+                else:
+                    converted_parts.append(convert_term(part))
+            return ''.join(converted_parts)
+        
         return expr
 
     def _convert_inside_expression(self, expr: str) -> str:
@@ -2146,6 +2256,7 @@ class SVtoPyVSCTranslator:
 # =============================================================================
 # CLI INTERFACE
 # =============================================================================
+
 def main():
     """Main entry point for CLI usage."""
     parser = argparse.ArgumentParser(
