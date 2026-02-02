@@ -1338,6 +1338,7 @@ from typing import Optional'''
             self._try_implication,
             self._try_conditional,
             self._try_array_size,
+            self._try_range_constraint,  # Convert var >= min && var <= max to rangelist
             self._try_simple_expression,
         ]
 
@@ -1867,6 +1868,27 @@ from typing import Optional'''
             i += 1
         
         return i - 1 if depth == 0 else -1
+
+    def _try_range_constraint(self, stmt: str) -> Optional[List[str]]:
+        """Try to translate range constraint: var >= min && var <= max -> var in vsc.rangelist(vsc.rng(min, max))"""
+        # Pattern: var >= min && var <= max (same variable on both sides)
+        # Also handles: var <= max && var >= min
+        pattern1 = r'(\w+)\s*>=\s*(-?\d+)\s*&&\s*(\w+)\s*<=\s*(-?\d+)'
+        pattern2 = r'(\w+)\s*<=\s*(-?\d+)\s*&&\s*(\w+)\s*>=\s*(-?\d+)'
+
+        match = re.match(pattern1, stmt)
+        if match:
+            var1, min_val, var2, max_val = match.groups()
+            if var1 == var2:
+                return [f"self.{var1} in vsc.rangelist(vsc.rng({min_val}, {max_val}))"]
+
+        match = re.match(pattern2, stmt)
+        if match:
+            var1, max_val, var2, min_val = match.groups()
+            if var1 == var2:
+                return [f"self.{var1} in vsc.rangelist(vsc.rng({min_val}, {max_val}))"]
+
+        return None
 
     def _try_simple_expression(self, stmt: str) -> Optional[List[str]]:
         """Try to translate simple expression."""
