@@ -228,8 +228,8 @@ class SVParser:
         """Extract field declarations from class body."""
         fields = []
         patterns = [
-            # rand/randc bit/logic [N:0] name [array]
-            r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
+            # rand/randc bit/logic [signed] [N:0] name [array]
+            r'(rand|randc)?\s*(bit|logic)\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
             # rand/randc int/byte/shortint/longint [unsigned] name
             r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(unsigned))?\s+(\w+)\s*;',
             # rand/randc enum_type name
@@ -255,20 +255,22 @@ class SVParser:
             if line in ['}', '{', '} else {'] or line.startswith('//'):
                 continue
 
-            # Handle comma-separated field declarations: rand bit [7:0] a, b, c;
-            comma_match = re.match(r'(rand|randc)?\s*(bit|logic)\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)', line)
+            # Handle comma-separated field declarations: rand bit [signed] [7:0] a, b, c;
+            comma_match = re.match(r'(rand|randc)?\s*(bit|logic)\s*(signed)?\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)', line)
             if comma_match:
-                rand_type, data_type, width_str, names_str = comma_match.groups()
+                rand_type, data_type, signed_str, width_str, names_str = comma_match.groups()
                 width = int(width_str) + 1 if width_str else 1
+                is_signed = signed_str == 'signed'
                 field_type = {'rand': FieldType.RAND, 'randc': FieldType.RANDC}.get(rand_type, FieldType.NON_RAND)
-                
+
                 for name in names_str.split(','):
                     name = name.strip()
                     if name and self._is_valid_field_name(name):
                         fields.append(SVField(
                             name=name, width=width, field_type=field_type,
-                            original_line=f"{rand_type or ''} {data_type} [{width-1}:0] {name};".strip(),
-                            data_type=data_type
+                            original_line=f"{rand_type or ''} {data_type} {'signed ' if is_signed else ''}[{width-1}:0] {name};".strip(),
+                            data_type=data_type,
+                            is_signed=is_signed
                         ))
                 continue
 
@@ -354,19 +356,22 @@ class SVParser:
             pass
         return None
 
-    def _parse_bit_field(self, groups: tuple, original: str, 
+    def _parse_bit_field(self, groups: tuple, original: str,
                          field_type: FieldType, data_type: str) -> SVField:
         """Parse bit/logic field declaration."""
-        width = int(groups[2]) + 1 if groups[2] else 1
-        name = groups[3]
-        array_size = int(groups[4]) if len(groups) > 4 and groups[4] else None
+        # Groups: (rand|randc, bit|logic, signed?, width?, name, array_size?)
+        is_signed = groups[2] == 'signed' if len(groups) > 2 else False
+        width = int(groups[3]) + 1 if len(groups) > 3 and groups[3] else 1
+        name = groups[4] if len(groups) > 4 else groups[3]
+        array_size = int(groups[5]) if len(groups) > 5 and groups[5] else None
         is_dynamic = array_size is None and '[]' in original
 
         return SVField(
             name=name, width=width, field_type=field_type,
             is_array=array_size is not None or is_dynamic,
             array_size=array_size, is_dynamic=is_dynamic,
-            original_line=original, data_type=data_type
+            original_line=original, data_type=data_type,
+            is_signed=is_signed
         )
 
     def _parse_int_field(self, groups: tuple, original: str,
@@ -971,6 +976,18 @@ from typing import Optional'''
 
         prefix = "vsc.rand_" if fld.field_type == FieldType.RAND else "vsc."
 
+        # Handle signed bit/logic types - map to appropriate signed int type
+        if fld.data_type in ('bit', 'logic') and fld.is_signed:
+            # Map signed bit widths to appropriate signed integer types
+            if fld.width <= 8:
+                return f"{prefix}int8_t()"
+            elif fld.width <= 16:
+                return f"{prefix}int16_t()"
+            elif fld.width <= 32:
+                return f"{prefix}int32_t()"
+            else:
+                return f"{prefix}int64_t()"
+
         type_map = {
             'bit': f"{prefix}bit_t({fld.width})",
             'logic': f"{prefix}bit_t({fld.width})",
@@ -986,6 +1003,16 @@ from typing import Optional'''
     def _get_inner_type(fld: SVField) -> str:
         """Get inner type for array."""
         if fld.data_type in ('bit', 'logic'):
+            if fld.is_signed:
+                # Map signed bit widths to appropriate signed integer types
+                if fld.width <= 8:
+                    return "vsc.int8_t()"
+                elif fld.width <= 16:
+                    return "vsc.int16_t()"
+                elif fld.width <= 32:
+                    return "vsc.int32_t()"
+                else:
+                    return "vsc.int64_t()"
             return f"vsc.bit_t({fld.width})"
         elif fld.data_type == 'int':
             return "vsc.int32_t()"

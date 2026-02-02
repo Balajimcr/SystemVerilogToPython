@@ -18,6 +18,16 @@ class Isp_rand_item_small extends uvm_sequence_item;
     rand bit [31:0] IsWdmaDataFormatYuv;
 
     // --------------------------------------------------------
+    // Signed variable test cases
+    // --------------------------------------------------------
+    rand bit signed [31:0] isp_grid_2d_0_0;
+    rand bit signed [31:0] isp_grid_2d_0_1;
+    rand bit signed [31:0] isp_grid_2d_0_2;
+    rand bit signed [31:0] isp_grid_2d_0_3;
+    rand bit signed [31:0] isp_grid_2d_0_4;
+    rand bit signed [31:0] isp_grid_2d_0_6;
+
+    // --------------------------------------------------------
     // UVM registration (kept minimal)
     // --------------------------------------------------------
     `uvm_object_utils_begin(Isp_rand_item_small)
@@ -126,4 +136,16 @@ class Isp_rand_item_small extends uvm_sequence_item;
         solve IsIspDstCompType before IsIspOutBittageType;
     }
 
+    // --------------------------------------------------------
+    // Signed variable constraints (testing negative ranges)
+    // --------------------------------------------------------
+
+    constraint CR_SIGNED_RANGE_isp_grid_2d {
+        isp_grid_2d_0_0 >= -1024 && isp_grid_2d_0_0 <= 1023;
+        isp_grid_2d_0_1 >= -1024 && isp_grid_2d_0_1 <= 1023;
+        isp_grid_2d_0_2 >= -512 && isp_grid_2d_0_2 <= 511;
+        isp_grid_2d_0_3 >= -512 && isp_grid_2d_0_3 <= 511;
+        isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
+        isp_grid_2d_0_6 >= -2048 && isp_grid_2d_0_6 <= 2047;
+    }
 endclass

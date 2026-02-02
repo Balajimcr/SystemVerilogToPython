@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python sv_to_pyvsc.py:*)",
+      "Bash(python example_sv_classes.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(python -m py_compile:*)"
+    ]
+  }
+}

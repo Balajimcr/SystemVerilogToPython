@@ -46,6 +46,12 @@ class IspRandItemSmall(UvmSequenceItem):
         self.IsIspOutBittageType = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspOutBittageType;
         self.IsRdmaDataFormatYuv = vsc.rand_bit_t(32)  # rand bit [31:0] IsRdmaDataFormatYuv;
         self.IsWdmaDataFormatYuv = vsc.rand_bit_t(32)  # rand bit [31:0] IsWdmaDataFormatYuv;
+        self.isp_grid_2d_0_0 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_0;
+        self.isp_grid_2d_0_1 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_1;
+        self.isp_grid_2d_0_2 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_2;
+        self.isp_grid_2d_0_3 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_3;
+        self.isp_grid_2d_0_4 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_4;
+        self.isp_grid_2d_0_6 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_6;
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
@@ -227,6 +233,29 @@ class IspRandItemSmall(UvmSequenceItem):
             self.IsIspOutBittageType in vsc.rangelist(1, 3)
         vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
         vsc.solve_order(self.IsIspDstCompType, self.IsIspOutBittageType)
+
+    @vsc.constraint
+    def CR_SIGNED_RANGE_isp_grid_2d(self):
+        """
+        Original SV constraint:
+        isp_grid_2d_0_0 >= -1024 && isp_grid_2d_0_0 <= 1023;
+        isp_grid_2d_0_1 >= -1024 && isp_grid_2d_0_1 <= 1023;
+        isp_grid_2d_0_2 >= -512 && isp_grid_2d_0_2 <= 511;
+        isp_grid_2d_0_3 >= -512 && isp_grid_2d_0_3 <= 511;
+        isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
+        isp_grid_2d_0_6 >= -2048 && isp_grid_2d_0_6 <= 2047;
+        
+        --- Constraint Metrics ---
+        Lines: 6 | Variables: 6
+        Logical Ops: 5 (&&: 5, ||: 0, !: 0) -> Output: and: 5, or: 0, not: 0
+        Constructs (SV->Py): inside: 1->1
+        """
+        self.isp_grid_2d_0_0 >= -1024 and self.isp_grid_2d_0_0 <= 1023
+        self.isp_grid_2d_0_1 >= -1024 and self.isp_grid_2d_0_1 <= 1023
+        self.isp_grid_2d_0_2 >= -512 and self.isp_grid_2d_0_2 <= 511
+        self.isp_grid_2d_0_3 >= -512 and self.isp_grid_2d_0_3 <= 511
+        self.isp_grid_2d_0_4 in vsc.rangelist(-100, -50, 0, 50, 100)
+        self.isp_grid_2d_0_6 >= -2048 and self.isp_grid_2d_0_6 <= 2047
 
 # =============================================================================
 # USAGE EXAMPLE
