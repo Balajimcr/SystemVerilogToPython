@@ -5,7 +5,8 @@
       "Bash(python example_sv_classes.py:*)",
       "Bash(pip install:*)",
       "Bash(python -m pip install:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(del example_sv_classes_verbose.py)"
     ]
   }
 }

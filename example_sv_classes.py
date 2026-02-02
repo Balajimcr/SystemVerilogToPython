@@ -38,108 +38,47 @@ class IspRandItemSmall(UvmSequenceItem):
 
     def __init__(self):
         super().__init__()
-        self.IsIspBypassMode = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspBypassMode;
-        self.IsIspYuvFormat = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspYuvFormat;
-        self.IsIspSrcCompType = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspSrcCompType;
-        self.IsIspDstCompType = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspDstCompType;
-        self.IsIspInBittageType = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspInBittageType;
-        self.IsIspOutBittageType = vsc.rand_bit_t(32)  # rand bit [31:0] IsIspOutBittageType;
-        self.IsRdmaDataFormatYuv = vsc.rand_bit_t(32)  # rand bit [31:0] IsRdmaDataFormatYuv;
-        self.IsWdmaDataFormatYuv = vsc.rand_bit_t(32)  # rand bit [31:0] IsWdmaDataFormatYuv;
-        self.isp_grid_2d_0_0 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_0;
-        self.isp_grid_2d_0_1 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_1;
-        self.isp_grid_2d_0_2 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_2;
-        self.isp_grid_2d_0_3 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_3;
-        self.isp_grid_2d_0_4 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_4;
-        self.isp_grid_2d_0_6 = vsc.rand_int32_t()  # rand bit signed [31:0] isp_grid_2d_0_6;
+        self.IsIspBypassMode = vsc.rand_bit_t(32)
+        self.IsIspYuvFormat = vsc.rand_bit_t(32)
+        self.IsIspSrcCompType = vsc.rand_bit_t(32)
+        self.IsIspDstCompType = vsc.rand_bit_t(32)
+        self.IsIspInBittageType = vsc.rand_bit_t(32)
+        self.IsIspOutBittageType = vsc.rand_bit_t(32)
+        self.IsRdmaDataFormatYuv = vsc.rand_bit_t(32)
+        self.IsWdmaDataFormatYuv = vsc.rand_bit_t(32)
+        self.isp_grid_2d_0_0 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_1 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_2 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_3 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_4 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_6 = vsc.rand_int32_t()
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
-        """
-        Original SV constraint:
-        IsIspBypassMode >= 0 && IsIspBypassMode <= 1;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspBypassMode >= 0 and self.IsIspBypassMode <= 1
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspYuvFormat(self):
-        """
-        Original SV constraint:
-        IsIspYuvFormat >= 0 && IsIspYuvFormat <= 1;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspYuvFormat >= 0 and self.IsIspYuvFormat <= 1
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspSrcCompType(self):
-        """
-        Original SV constraint:
-        IsIspSrcCompType >= 0 && IsIspSrcCompType <= 2;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspSrcCompType >= 0 and self.IsIspSrcCompType <= 2
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspDstCompType(self):
-        """
-        Original SV constraint:
-        IsIspDstCompType >= 0 && IsIspDstCompType <= 2;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspDstCompType >= 0 and self.IsIspDstCompType <= 2
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspInBittageType(self):
-        """
-        Original SV constraint:
-        IsIspInBittageType >= 0 && IsIspInBittageType <= 3;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspInBittageType >= 0 and self.IsIspInBittageType <= 3
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspOutBittageType(self):
-        """
-        Original SV constraint:
-        IsIspOutBittageType >= 0 && IsIspOutBittageType <= 3;
-        
-        --- Constraint Metrics ---
-        Lines: 1 | Variables: 1
-        Logical Ops: 1 (&&: 1, ||: 0, !: 0) -> Output: and: 1, or: 0, not: 0
-        """
         self.IsIspOutBittageType >= 0 and self.IsIspOutBittageType <= 3
 
     @vsc.constraint
     def cr1(self):
-        """
-        Original SV constraint:
-        if (IsRdmaDataFormatYuv inside {4, 5, 16, 17, 20, 21})
-        IsIspYuvFormat == 0;
-        else
-        IsIspYuvFormat == 1;
-        solve IsRdmaDataFormatYuv before IsIspYuvFormat;
-        
-        --- Constraint Metrics ---
-        Lines: 5 | Variables: 2
-        Conditionals: 1 (if: 1, else-if: 0, else: 2) -> Output: if_then: 1, else_if: 0, else_then: 1
-        Constructs (SV->Py): inside: 1->1, solve: 1->1
-        """
         with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 16, 17, 20, 21)):
             self.IsIspYuvFormat == 0
         with vsc.else_then:
@@ -148,35 +87,12 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def cr4(self):
-        """
-        Original SV constraint:
-        if (IsIspBypassMode)
-        IsIspSrcCompType inside {0, 1};
-        solve IsIspBypassMode before IsIspSrcCompType;
-        
-        --- Constraint Metrics ---
-        Lines: 3 | Variables: 2
-        Conditionals: 1 (if: 1, else-if: 0, else: 0) -> Output: if_then: 1, else_if: 0, else_then: 0
-        Constructs (SV->Py): inside: 1->1, solve: 1->1
-        """
         with vsc.if_then((self.IsIspBypassMode != 0)):
             self.IsIspSrcCompType in vsc.rangelist(0, 1)
         vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
 
     @vsc.constraint
     def cr5(self):
-        """
-        Original SV constraint:
-        if (IsIspBypassMode)
-        IsIspDstCompType == IsIspSrcCompType;
-        solve IsIspBypassMode before IsIspDstCompType;
-        solve IsIspSrcCompType before IsIspDstCompType;
-        
-        --- Constraint Metrics ---
-        Lines: 4 | Variables: 3
-        Conditionals: 1 (if: 1, else-if: 0, else: 0) -> Output: if_then: 1, else_if: 0, else_then: 0
-        Constructs (SV->Py): solve: 2->2
-        """
         with vsc.if_then((self.IsIspBypassMode != 0)):
             self.IsIspDstCompType == self.IsIspSrcCompType
         vsc.solve_order(self.IsIspBypassMode, self.IsIspDstCompType)
@@ -184,21 +100,6 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def cr6(self):
-        """
-        Original SV constraint:
-        if (IsRdmaDataFormatYuv inside {4, 5, 7, 8})
-        IsIspInBittageType == 0;
-        else if (IsRdmaDataFormatYuv inside {16, 17, 32, 33})
-        IsIspInBittageType == 1;
-        else
-        IsIspInBittageType == 3;
-        solve IsRdmaDataFormatYuv before IsIspInBittageType;
-        
-        --- Constraint Metrics ---
-        Lines: 7 | Variables: 2
-        Conditionals: 3 (if: 2, else-if: 1, else: 2) -> Output: if_then: 1, else_if: 1, else_then: 1
-        Constructs (SV->Py): inside: 2->2, solve: 1->1
-        """
         with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8)):
             self.IsIspInBittageType == 0
         with vsc.else_if(self.IsRdmaDataFormatYuv in vsc.rangelist(16, 17, 32, 33)):
@@ -209,22 +110,6 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def cr7(self):
-        """
-        Original SV constraint:
-        if (IsIspInBittageType == 0)
-        IsIspOutBittageType == 0;
-        else if (IsIspDstCompType > 0)
-        IsIspOutBittageType == 1;
-        else
-        IsIspOutBittageType inside {1, 3};
-        solve IsIspInBittageType before IsIspOutBittageType;
-        solve IsIspDstCompType before IsIspOutBittageType;
-        
-        --- Constraint Metrics ---
-        Lines: 8 | Variables: 3
-        Conditionals: 3 (if: 2, else-if: 1, else: 2) -> Output: if_then: 1, else_if: 1, else_then: 1
-        Constructs (SV->Py): inside: 1->1, solve: 2->2
-        """
         with vsc.if_then(self.IsIspInBittageType == 0):
             self.IsIspOutBittageType == 0
         with vsc.else_if(self.IsIspDstCompType > 0):
@@ -236,20 +121,6 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def CR_SIGNED_RANGE_isp_grid_2d(self):
-        """
-        Original SV constraint:
-        isp_grid_2d_0_0 >= -1024 && isp_grid_2d_0_0 <= 1023;
-        isp_grid_2d_0_1 >= -1024 && isp_grid_2d_0_1 <= 1023;
-        isp_grid_2d_0_2 >= -512 && isp_grid_2d_0_2 <= 511;
-        isp_grid_2d_0_3 >= -512 && isp_grid_2d_0_3 <= 511;
-        isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
-        isp_grid_2d_0_6 >= -2048 && isp_grid_2d_0_6 <= 2047;
-        
-        --- Constraint Metrics ---
-        Lines: 6 | Variables: 6
-        Logical Ops: 5 (&&: 5, ||: 0, !: 0) -> Output: and: 5, or: 0, not: 0
-        Constructs (SV->Py): inside: 1->1
-        """
         self.isp_grid_2d_0_0 >= -1024 and self.isp_grid_2d_0_0 <= 1023
         self.isp_grid_2d_0_1 >= -1024 and self.isp_grid_2d_0_1 <= 1023
         self.isp_grid_2d_0_2 >= -512 and self.isp_grid_2d_0_2 <= 511

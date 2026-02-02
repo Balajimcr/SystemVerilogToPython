@@ -494,7 +494,8 @@ class PyVSCGenerator:
 
     INDENT = "    "
 
-    def __init__(self):
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose  # When True, include original SV code and metrics in output
         self.warnings: List[str] = []
         self.manual_review_items: List[str] = []
         self.mapping_notes: List[str] = []
@@ -954,7 +955,8 @@ from typing import Optional'''
 
     def _generate_field(self, fld: SVField) -> str:
         """Generate pyvsc field declaration."""
-        comment = f"  # {fld.original_line.strip()}" if fld.original_line else ""
+        # Only include inline comments with original SV code when verbose mode is enabled
+        comment = f"  # {fld.original_line.strip()}" if self.verbose and fld.original_line else ""
 
         if fld.is_enum:
             enum_class = self._to_python_class_name(fld.enum_type or "UnknownEnum")
@@ -1022,80 +1024,88 @@ from typing import Optional'''
         """Generate pyvsc constraint from SV constraint."""
         # Calculate per-constraint metrics from source
         metrics = self._calculate_constraint_metrics(constraint.body)
-        
+
         # First translate the body to get output
         body_lines = self._translate_constraint_body(constraint.body)
         body_code = '\n'.join(body_lines)
-        
+
         # Calculate output metrics
         output_metrics = self._calculate_output_metrics(body_code, metrics['variable_names'])
-        
+
         lines = [
             f"{self.INDENT}@vsc.constraint",
             f"{self.INDENT}def {constraint.name}(self):",
-            f'{self.INDENT}{self.INDENT}"""',
-            f'{self.INDENT}{self.INDENT}Original SV constraint:',
         ]
 
-        for orig_line in constraint.body.split('\n'):
-            if orig_line.strip():
-                lines.append(f'{self.INDENT}{self.INDENT}{orig_line.strip()}')
-        
-        # Add metrics section to docstring
-        lines.append(f'{self.INDENT}{self.INDENT}')
-        lines.append(f'{self.INDENT}{self.INDENT}--- Constraint Metrics ---')
-        lines.append(f'{self.INDENT}{self.INDENT}Lines: {metrics["lines"]} | Variables: {metrics["variables"]}')
-        
-        # Conditionals with output comparison
-        if metrics['conditionals'] > 0 or metrics['else_count'] > 0:
-            cond_str = f'Conditionals: {metrics["conditionals"]} (if: {metrics["if_count"]}, else-if: {metrics["else_if_count"]}, else: {metrics["else_count"]})'
-            out_cond = f' -> Output: if_then: {output_metrics["if_then"]}, else_if: {output_metrics["else_if"]}, else_then: {output_metrics["else_then"]}'
-            lines.append(f'{self.INDENT}{self.INDENT}{cond_str}{out_cond}')
-        
-        # Logical operators
-        if metrics['logical_total'] > 0:
-            lines.append(f'{self.INDENT}{self.INDENT}Logical Ops: {metrics["logical_total"]} (&&: {metrics["and_count"]}, ||: {metrics["or_count"]}, !: {metrics["not_count"]}) -> Output: and: {output_metrics["and"]}, or: {output_metrics["or"]}, not: {output_metrics["not"]}')
-        
-        # Constraint constructs with output comparison
-        constructs = []
-        if metrics['inside_count'] > 0:
-            constructs.append(f'inside: {metrics["inside_count"]}->{output_metrics["rangelist"]}')
-        if metrics['implies_count'] > 0:
-            constructs.append(f'implies: {metrics["implies_count"]}->{output_metrics["implies"]}')
-        if metrics['dist_count'] > 0:
-            constructs.append(f'dist: {metrics["dist_count"]}->{output_metrics["dist"]}')
-        if metrics['solve_count'] > 0:
-            constructs.append(f'solve: {metrics["solve_count"]}->{output_metrics["solve_order"]}')
-        if metrics['foreach_count'] > 0:
-            constructs.append(f'foreach: {metrics["foreach_count"]}->{output_metrics["foreach"]}')
-        if metrics['unique_count'] > 0:
-            constructs.append(f'unique: {metrics["unique_count"]}->{output_metrics["unique"]}')
-        if metrics['soft_count'] > 0:
-            constructs.append(f'soft: {metrics["soft_count"]}->{output_metrics["soft"]}')
-        
-        if constructs:
-            lines.append(f'{self.INDENT}{self.INDENT}Constructs (SV->Py): {", ".join(constructs)}')
-        
-        # Special items
-        specials = []
-        if metrics['bit_slices'] > 0:
-            specials.append(f'bit_slices: {metrics["bit_slices"]}')
-        if metrics['number_formats'] > 0:
-            specials.append(f'number_formats: {metrics["number_formats"]}')
-        
-        if specials:
-            lines.append(f'{self.INDENT}{self.INDENT}Special: {", ".join(specials)}')
-        
-        # Variable validation
+        # Only include docstring with original SV code and metrics when verbose mode is enabled
+        if self.verbose:
+            lines.append(f'{self.INDENT}{self.INDENT}"""')
+            lines.append(f'{self.INDENT}{self.INDENT}Original SV constraint:')
+
+            for orig_line in constraint.body.split('\n'):
+                if orig_line.strip():
+                    lines.append(f'{self.INDENT}{self.INDENT}{orig_line.strip()}')
+
+            # Add metrics section to docstring
+            lines.append(f'{self.INDENT}{self.INDENT}')
+            lines.append(f'{self.INDENT}{self.INDENT}--- Constraint Metrics ---')
+            lines.append(f'{self.INDENT}{self.INDENT}Lines: {metrics["lines"]} | Variables: {metrics["variables"]}')
+
+            # Conditionals with output comparison
+            if metrics['conditionals'] > 0 or metrics['else_count'] > 0:
+                cond_str = f'Conditionals: {metrics["conditionals"]} (if: {metrics["if_count"]}, else-if: {metrics["else_if_count"]}, else: {metrics["else_count"]})'
+                out_cond = f' -> Output: if_then: {output_metrics["if_then"]}, else_if: {output_metrics["else_if"]}, else_then: {output_metrics["else_then"]}'
+                lines.append(f'{self.INDENT}{self.INDENT}{cond_str}{out_cond}')
+
+            # Logical operators
+            if metrics['logical_total'] > 0:
+                lines.append(f'{self.INDENT}{self.INDENT}Logical Ops: {metrics["logical_total"]} (&&: {metrics["and_count"]}, ||: {metrics["or_count"]}, !: {metrics["not_count"]}) -> Output: and: {output_metrics["and"]}, or: {output_metrics["or"]}, not: {output_metrics["not"]}')
+
+            # Constraint constructs with output comparison
+            constructs = []
+            if metrics['inside_count'] > 0:
+                constructs.append(f'inside: {metrics["inside_count"]}->{output_metrics["rangelist"]}')
+            if metrics['implies_count'] > 0:
+                constructs.append(f'implies: {metrics["implies_count"]}->{output_metrics["implies"]}')
+            if metrics['dist_count'] > 0:
+                constructs.append(f'dist: {metrics["dist_count"]}->{output_metrics["dist"]}')
+            if metrics['solve_count'] > 0:
+                constructs.append(f'solve: {metrics["solve_count"]}->{output_metrics["solve_order"]}')
+            if metrics['foreach_count'] > 0:
+                constructs.append(f'foreach: {metrics["foreach_count"]}->{output_metrics["foreach"]}')
+            if metrics['unique_count'] > 0:
+                constructs.append(f'unique: {metrics["unique_count"]}->{output_metrics["unique"]}')
+            if metrics['soft_count'] > 0:
+                constructs.append(f'soft: {metrics["soft_count"]}->{output_metrics["soft"]}')
+
+            if constructs:
+                lines.append(f'{self.INDENT}{self.INDENT}Constructs (SV->Py): {", ".join(constructs)}')
+
+            # Special items
+            specials = []
+            if metrics['bit_slices'] > 0:
+                specials.append(f'bit_slices: {metrics["bit_slices"]}')
+            if metrics['number_formats'] > 0:
+                specials.append(f'number_formats: {metrics["number_formats"]}')
+
+            if specials:
+                lines.append(f'{self.INDENT}{self.INDENT}Special: {", ".join(specials)}')
+
+            # Variable validation
+            if output_metrics['missing_vars']:
+                lines.append(f'{self.INDENT}{self.INDENT}MISSING VARS: {", ".join(sorted(output_metrics["missing_vars"]))}')
+
+            if output_metrics['name_mismatches']:
+                lines.append(f'{self.INDENT}{self.INDENT}NAME CHANGES: {output_metrics["name_mismatches"]}')
+
+            lines.append(f'{self.INDENT}{self.INDENT}"""')
+
+        # Always track warnings internally regardless of verbose mode
         if output_metrics['missing_vars']:
-            lines.append(f'{self.INDENT}{self.INDENT}⚠️ MISSING VARS: {", ".join(sorted(output_metrics["missing_vars"]))}')
             self._add_warning(f"Constraint '{constraint.name}': Variables missing in output: {', '.join(sorted(output_metrics['missing_vars']))}")
-        
+
         if output_metrics['name_mismatches']:
-            lines.append(f'{self.INDENT}{self.INDENT}⚠️ NAME CHANGES: {output_metrics["name_mismatches"]}')
             self._add_warning(f"Constraint '{constraint.name}': Variable names may have changed")
-        
-        lines.append(f'{self.INDENT}{self.INDENT}"""')
 
         if body_lines:
             for line in body_lines:
@@ -2145,9 +2155,9 @@ from typing import Optional'''
 class SVtoPyVSCTranslator:
     """Main translator class that orchestrates the translation process."""
 
-    def __init__(self):
+    def __init__(self, verbose: bool = False):
         self.parser = SVParser()
-        self.generator = PyVSCGenerator()
+        self.generator = PyVSCGenerator(verbose=verbose)
 
     def translate_file(self, input_path: str, output_path: Optional[str] = None) -> TranslationResult:
         """Translate a SystemVerilog file to pyvsc."""
@@ -2324,7 +2334,7 @@ def main():
     if used_default_output:
         args.quiet = True
 
-    translator = SVtoPyVSCTranslator()
+    translator = SVtoPyVSCTranslator(verbose=args.report)
 
     try:
         result = translator.translate_file(args.input, args.output)
