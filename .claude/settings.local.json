@@ -6,7 +6,8 @@
       "Bash(pip install:*)",
       "Bash(python -m pip install:*)",
       "Bash(python -m py_compile:*)",
-      "Bash(del example_sv_classes_verbose.py)"
+      "Bash(del example_sv_classes_verbose.py)",
+      "Bash(git status:*)"
     ]
   }
 }

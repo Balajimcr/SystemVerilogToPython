@@ -2001,11 +2001,13 @@ from typing import Optional'''
     @staticmethod
     def _convert_logical_operators(expr: str) -> str:
         """Convert SV logical operators to Python equivalents."""
-        # Replace && with 'and' and || with 'or'
-        # Be careful not to replace inside strings
+        # Replace && with 'and' and || with 'or' first (before single & and |)
         expr = re.sub(r'\s*&&\s*', ' and ', expr)
         expr = re.sub(r'\s*\|\|\s*', ' or ', expr)
-        # Replace logical NOT (!) but not != 
+        # Replace single & with 'and' and | with 'or' (bitwise used as logical in SV constraints)
+        expr = re.sub(r'\s*&\s*', ' and ', expr)
+        expr = re.sub(r'\s*\|\s*', ' or ', expr)
+        # Replace logical NOT (!) but not !=
         expr = re.sub(r'!\s*(?!=)', 'not ', expr)
         return expr
 

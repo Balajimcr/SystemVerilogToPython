@@ -103,6 +103,9 @@ class Isp_rand_item_small extends uvm_sequence_item;
 
         solve IsIspBypassMode before IsIspDstCompType;
         solve IsIspSrcCompType before IsIspDstCompType;
+		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspDstCompType before IsIspInBittageType;
+        solve IsIspInBittageType before IsIspOutBittageType;
     }
 
     // --------------------------------------------------------
@@ -118,6 +121,10 @@ class Isp_rand_item_small extends uvm_sequence_item;
             IsIspInBittageType == 3;
 
         solve IsRdmaDataFormatYuv before IsIspInBittageType;
+		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspSrcCompType before IsIspDstCompType;
+        solve IsIspDstCompType before IsIspInBittageType;
+        solve IsIspInBittageType before IsIspOutBittageType;
     }
 
     // --------------------------------------------------------
@@ -134,6 +141,28 @@ class Isp_rand_item_small extends uvm_sequence_item;
 
         solve IsIspInBittageType before IsIspOutBittageType;
         solve IsIspDstCompType before IsIspOutBittageType;
+		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspSrcCompType before IsIspDstCompType;
+        solve IsIspDstCompType before IsIspInBittageType;
+        solve IsIspInBittageType before IsIspOutBittageType;
+    }
+
+    // --------------------------------------------------------
+    // Test constraint with many solve orders in specific sequence
+    // --------------------------------------------------------
+
+    constraint cr8_solve_order_test {
+        if (IsIspBypassMode)
+            IsIspYuvFormat == 0;
+        else
+            IsIspYuvFormat == 1;
+
+        solve IsRdmaDataFormatYuv before IsWdmaDataFormatYuv;
+		solve IsIspBypassMode before IsIspYuvFormat;
+        solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspSrcCompType before IsIspDstCompType;
+        solve IsIspDstCompType before IsIspInBittageType;
+        solve IsIspInBittageType before IsIspOutBittageType;
     }
 
     // --------------------------------------------------------
@@ -147,5 +176,15 @@ class Isp_rand_item_small extends uvm_sequence_item;
         isp_grid_2d_0_3 >= -512 && isp_grid_2d_0_3 <= 511;
         isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
         isp_grid_2d_0_6 >= -2048 && isp_grid_2d_0_6 <= 2047;
+    }
+
+    // --------------------------------------------------------
+    // Test single & and | operators
+    // --------------------------------------------------------
+
+    constraint cr9_single_logical_ops {
+        (IsIspBypassMode == 1) & (IsIspYuvFormat == 0);
+        (IsIspSrcCompType == 0) | (IsIspDstCompType == 1);
+        (IsIspInBittageType >= 0) & (IsIspInBittageType <= 2) | (IsIspOutBittageType == 3);
     }
 endclass
