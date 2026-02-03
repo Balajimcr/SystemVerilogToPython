@@ -170,6 +170,14 @@ class IspRandItemSmall(UvmSequenceItem):
     def cr12_bit_slice(self):
         self.IsIspSrcCompType[15:0] == self.IsIspDstCompType[15:0]
 
+    @vsc.constraint
+    def cr13_paren_range(self):
+        self.isp_grid_2d_0_0 in vsc.rangelist(vsc.rng(-8388607, 8388607))
+
+    @vsc.constraint
+    def cr14_paren_range(self):
+        self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-8388607, 8388607))
+
 # =============================================================================
 # USAGE EXAMPLE
 # =============================================================================

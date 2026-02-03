@@ -1880,18 +1880,37 @@ from typing import Optional'''
 
     def _try_range_constraint(self, stmt: str) -> Optional[List[str]]:
         """Try to translate range constraint: var >= min && var <= max -> var in vsc.rangelist(vsc.rng(min, max))"""
-        # Pattern: var >= min && var <= max (same variable on both sides)
-        # Also handles: var <= max && var >= min
-        pattern1 = r'(\w+)\s*>=\s*(-?\d+)\s*&&\s*(\w+)\s*<=\s*(-?\d+)'
-        pattern2 = r'(\w+)\s*<=\s*(-?\d+)\s*&&\s*(\w+)\s*>=\s*(-?\d+)'
+        # Strip outer parentheses if present
+        stripped = stmt.strip()
+        while stripped.startswith('(') and stripped.endswith(')'):
+            # Check if these are matching outer parentheses
+            depth = 0
+            is_outer = True
+            for i, c in enumerate(stripped):
+                if c == '(':
+                    depth += 1
+                elif c == ')':
+                    depth -= 1
+                if depth == 0 and i < len(stripped) - 1:
+                    is_outer = False
+                    break
+            if is_outer:
+                stripped = stripped[1:-1].strip()
+            else:
+                break
 
-        match = re.match(pattern1, stmt)
+        # Pattern: var >= min && var <= max or var >= min & var <= max (same variable on both sides)
+        # Also handles: var <= max && var >= min
+        pattern1 = r'(\w+)\s*>=\s*(-?\d+)\s*(?:&&|&)\s*(\w+)\s*<=\s*(-?\d+)'
+        pattern2 = r'(\w+)\s*<=\s*(-?\d+)\s*(?:&&|&)\s*(\w+)\s*>=\s*(-?\d+)'
+
+        match = re.match(pattern1, stripped)
         if match:
             var1, min_val, var2, max_val = match.groups()
             if var1 == var2:
                 return [f"self.{var1} in vsc.rangelist(vsc.rng({min_val}, {max_val}))"]
 
-        match = re.match(pattern2, stmt)
+        match = re.match(pattern2, stripped)
         if match:
             var1, max_val, var2, min_val = match.groups()
             if var1 == var2:

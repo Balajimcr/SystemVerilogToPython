@@ -203,4 +203,16 @@ class Isp_rand_item_small extends uvm_sequence_item;
     constraint cr12_bit_slice {
         IsIspSrcCompType[15:0] == IsIspDstCompType[15:0];
     }
+
+    // --------------------------------------------------------
+    // Test parenthesized range constraints
+    // --------------------------------------------------------
+
+    constraint cr13_paren_range {
+        (isp_grid_2d_0_0 >= -8388607 && isp_grid_2d_0_0 <= 8388607);
+    }
+
+    constraint cr14_paren_range {
+        (isp_grid_2d_0_1 >= -8388607 && isp_grid_2d_0_1 <= 8388607);
+    }
 endclass
