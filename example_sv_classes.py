@@ -158,6 +158,18 @@ class IspRandItemSmall(UvmSequenceItem):
         (self.IsIspSrcCompType == 0) or (self.IsIspDstCompType == 1)
         (self.IsIspInBittageType >= 0) and (self.IsIspInBittageType <= 2) or (self.IsIspOutBittageType == 3)
 
+    @vsc.constraint
+    def cr10_bit_slice(self):
+        self.IsIspBypassMode[3:0] == 0
+
+    @vsc.constraint
+    def cr11_bit_slice(self):
+        self.IsIspYuvFormat[7:4] == 0
+
+    @vsc.constraint
+    def cr12_bit_slice(self):
+        self.IsIspSrcCompType[15:0] == self.IsIspDstCompType[15:0]
+
 # =============================================================================
 # USAGE EXAMPLE
 # =============================================================================

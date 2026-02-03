@@ -187,4 +187,20 @@ class Isp_rand_item_small extends uvm_sequence_item;
         (IsIspSrcCompType == 0) | (IsIspDstCompType == 1);
         (IsIspInBittageType >= 0) & (IsIspInBittageType <= 2) | (IsIspOutBittageType == 3);
     }
+
+    // --------------------------------------------------------
+    // Test bit slicing constraints
+    // --------------------------------------------------------
+
+    constraint cr10_bit_slice {
+        IsIspBypassMode[3:0] == 0;
+    }
+
+    constraint cr11_bit_slice {
+        IsIspYuvFormat[7:4] == 0;
+    }
+
+    constraint cr12_bit_slice {
+        IsIspSrcCompType[15:0] == IsIspDstCompType[15:0];
+    }
 endclass

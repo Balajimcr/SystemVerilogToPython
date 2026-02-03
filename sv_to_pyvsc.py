@@ -2028,21 +2028,10 @@ from typing import Optional'''
         return result
 
     def _convert_bit_slicing(self, expr: str) -> str:
-        """Convert bit slicing to shifts and masks."""
-        def replace_slice(match):
-            var, high, low = match.group(1), int(match.group(2)), int(match.group(3))
-            width = high - low + 1
-            mask = (1 << width) - 1
-
-            self._add_review_item(
-                f"Bit slice '{match.group(0)}' converted to shift/mask - verify correctness"
-            )
-
-            if low == 0:
-                return f"({var} & 0x{mask:X})"
-            return f"(({var} >> {low}) & 0x{mask:X})"
-
-        return re.sub(r'(\w+)\[(\d+):(\d+)\]', replace_slice, expr)
+        """Preserve bit slicing syntax - PyVSC supports var[high:low] directly."""
+        # PyVSC supports bit slicing with [] syntax, so we just preserve it as-is
+        # The only change needed is to ensure the variable gets self. prefix (handled elsewhere)
+        return expr
 
     @staticmethod
     def _convert_numbers(expr: str) -> str:
