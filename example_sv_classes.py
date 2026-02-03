@@ -79,45 +79,45 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def cr1(self):
+        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspYuvFormat)
         with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 16, 17, 20, 21)):
             self.IsIspYuvFormat == 0
         with vsc.else_then:
             self.IsIspYuvFormat == 1
-        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspYuvFormat)
 
     @vsc.constraint
     def cr4(self):
+        vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
         with vsc.if_then((self.IsIspBypassMode != 0)):
             self.IsIspSrcCompType in vsc.rangelist(0, 1)
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
 
     @vsc.constraint
     def cr5(self):
-        with vsc.if_then((self.IsIspBypassMode != 0)):
-            self.IsIspDstCompType == self.IsIspSrcCompType
         vsc.solve_order(self.IsIspBypassMode, self.IsIspDstCompType)
         vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
+        with vsc.if_then((self.IsIspBypassMode != 0)):
+            self.IsIspDstCompType == self.IsIspSrcCompType
 
     @vsc.constraint
     def cr6(self):
+        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspInBittageType)
         with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8)):
             self.IsIspInBittageType == 0
         with vsc.else_if(self.IsRdmaDataFormatYuv in vsc.rangelist(16, 17, 32, 33)):
             self.IsIspInBittageType == 1
         with vsc.else_then:
             self.IsIspInBittageType == 3
-        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspInBittageType)
 
     @vsc.constraint
     def cr7(self):
+        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
+        vsc.solve_order(self.IsIspDstCompType, self.IsIspOutBittageType)
         with vsc.if_then(self.IsIspInBittageType == 0):
             self.IsIspOutBittageType == 0
         with vsc.else_if(self.IsIspDstCompType > 0):
             self.IsIspOutBittageType == 1
         with vsc.else_then:
             self.IsIspOutBittageType in vsc.rangelist(1, 3)
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspOutBittageType)
 
     @vsc.constraint
     def CR_SIGNED_RANGE_isp_grid_2d(self):

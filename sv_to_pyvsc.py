@@ -1249,11 +1249,20 @@ from typing import Optional'''
 
     def _translate_constraint_body(self, body: str) -> List[str]:
         """Translate constraint body to pyvsc."""
-        lines = []
+        solve_order_lines = []
+        other_lines = []
+
         for stmt in self._split_statements(body):
             if stmt.strip():
-                lines.extend(self._translate_statement(stmt.strip()))
-        return lines
+                translated = self._translate_statement(stmt.strip())
+                for line in translated:
+                    if 'vsc.solve_order(' in line:
+                        solve_order_lines.append(line)
+                    else:
+                        other_lines.append(line)
+
+        # solve_order statements must come first, before conditionals
+        return solve_order_lines + other_lines
 
     @staticmethod
     def _split_statements(body: str) -> List[str]:
