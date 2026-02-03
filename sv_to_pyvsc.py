@@ -2228,40 +2228,40 @@ class SVtoPyVSCTranslator:
         print("=" * 80)
         
         # Source and Output Metrics Summary
-        print("\n" + "─" * 80)
-        print("📈 CONVERSION METRICS")
-        print("─" * 80)
+        print("\n" + "-" * 80)
+        print("CONVERSION METRICS")
+        print("-" * 80)
         
         m = self.generator.metrics
         
         # Line counts
-        print(f"\n  📄 Lines:")
+        print(f"\n  Lines:")
         print(f"     Source SV:     {m['sv_lines']:>6}")
         print(f"     Output Python: {m['py_lines']:>6}")
         
         # Variable counts
-        print(f"\n  📦 Variables:")
+        print(f"\n  Variables:")
         print(f"     Detected in SV:     {len(m['sv_variables']):>6}")
         print(f"     Present in Python:  {len(m['py_variables']):>6}")
         
         # Conditionals
         sv_cond = m['sv_conditionals']
         py_cond = m['py_if_then'] + m['py_else_if']
-        print(f"\n  🔀 Conditionals:")
+        print(f"\n  Conditionals:")
         print(f"     Detected (if/else if): {sv_cond:>6}")
         print(f"     Converted (if_then/else_if): {py_cond:>6}")
         
         # Logical operators
         sv_logical = m['sv_logical_and'] + m['sv_logical_or'] + m['sv_logical_not']
         py_logical = m.get('py_logical_and', 0) + m.get('py_logical_or', 0) + m.get('py_logical_not', 0)
-        print(f"\n  🔣 Logical Operators:")
-        print(f"     && detected:  {m['sv_logical_and']:>4}  →  'and' converted: {m.get('py_logical_and', 0):>4}")
-        print(f"     || detected:  {m['sv_logical_or']:>4}  →  'or' converted:  {m.get('py_logical_or', 0):>4}")
-        print(f"     !  detected:  {m['sv_logical_not']:>4}  →  'not' converted: {m.get('py_logical_not', 0):>4}")
-        print(f"     Total:        {sv_logical:>4}  →  Total:           {py_logical:>4}")
+        print(f"\n  Logical Operators:")
+        print(f"     && detected:  {m['sv_logical_and']:>4}  ->  'and' converted: {m.get('py_logical_and', 0):>4}")
+        print(f"     || detected:  {m['sv_logical_or']:>4}  ->  'or' converted:  {m.get('py_logical_or', 0):>4}")
+        print(f"     !  detected:  {m['sv_logical_not']:>4}  ->  'not' converted: {m.get('py_logical_not', 0):>4}")
+        print(f"     Total:        {sv_logical:>4}  ->  Total:           {py_logical:>4}")
         
         # Constraint constructs comparison
-        print(f"\n  🎯 Constraint Constructs:")
+        print(f"\n  Constraint Constructs:")
         print(f"     {'Construct':<20} {'SV Detected':>12} {'Python Generated':>18}")
         print(f"     {'-'*20} {'-'*12} {'-'*18}")
         print(f"     {'inside':<20} {m['sv_inside']:>12} {m['py_rangelist']:>18}")
@@ -2273,52 +2273,52 @@ class SVtoPyVSCTranslator:
         print(f"     {'soft':<20} {m['sv_soft']:>12} {m['py_soft']:>18}")
         
         # Special conversions
-        print(f"\n  🔧 Special Conversions:")
+        print(f"\n  Special Conversions:")
         print(f"     Bit slices detected:   {m['sv_bit_slices']:>6}")
         print(f"     Number formats (N'h):  {m['sv_number_formats']:>6}")
         
         # Basic statistics
-        print("\n" + "─" * 80)
-        print("📊 TRANSLATION STATISTICS")
-        print("─" * 80)
+        print("\n" + "-" * 80)
+        print("TRANSLATION STATISTICS")
+        print("-" * 80)
         for key, value in result.statistics.items():
-            print(f"   • {key.capitalize()}: {value}")
+            print(f"   * {key.capitalize()}: {value}")
 
         if result.mapping_notes:
-            print("\n" + "─" * 80)
-            print("📝 MAPPING NOTES")
-            print("─" * 80)
+            print("\n" + "-" * 80)
+            print("MAPPING NOTES")
+            print("-" * 80)
             for note in result.mapping_notes:
-                print(f"   • {note}")
+                print(f"   * {note}")
 
         if result.warnings:
-            print("\n" + "─" * 80)
-            print("⚠️  WARNINGS")
-            print("─" * 80)
+            print("\n" + "-" * 80)
+            print("WARNINGS")
+            print("-" * 80)
             for warning in result.warnings:
-                print(f"   • {warning}")
+                print(f"   * {warning}")
 
         if result.manual_review_items:
-            print("\n" + "─" * 80)
-            print("🔍 MANUAL REVIEW REQUIRED")
-            print("─" * 80)
+            print("\n" + "-" * 80)
+            print("MANUAL REVIEW REQUIRED")
+            print("-" * 80)
             for item in result.manual_review_items:
-                print(f"   • {item}")
+                print(f"   * {item}")
         
         # Validation summary
-        print("\n" + "─" * 80)
-        print("✅ OUTPUT VALIDATION")
-        print("─" * 80)
-        print(f"   • if_then blocks:      {m['py_if_then']:>6}")
-        print(f"   • else_if blocks:      {m['py_else_if']:>6}")
-        print(f"   • else_then blocks:    {m['py_else_then']:>6}")
-        print(f"   • rangelist (inside):  {m['py_rangelist']:>6}")
-        print(f"   • implies:             {m['py_implies']:>6}")
-        print(f"   • dist:                {m['py_dist']:>6}")
-        print(f"   • solve_order:         {m['py_solve_order']:>6}")
-        print(f"   • foreach:             {m['py_foreach']:>6}")
-        print(f"   • unique:              {m['py_unique']:>6}")
-        print(f"   • soft:                {m['py_soft']:>6}")
+        print("\n" + "-" * 80)
+        print("OUTPUT VALIDATION")
+        print("-" * 80)
+        print(f"   * if_then blocks:      {m['py_if_then']:>6}")
+        print(f"   * else_if blocks:      {m['py_else_if']:>6}")
+        print(f"   * else_then blocks:    {m['py_else_then']:>6}")
+        print(f"   * rangelist (inside):  {m['py_rangelist']:>6}")
+        print(f"   * implies:             {m['py_implies']:>6}")
+        print(f"   * dist:                {m['py_dist']:>6}")
+        print(f"   * solve_order:         {m['py_solve_order']:>6}")
+        print(f"   * foreach:             {m['py_foreach']:>6}")
+        print(f"   * unique:              {m['py_unique']:>6}")
+        print(f"   * soft:                {m['py_soft']:>6}")
 
         print("\n" + "=" * 80)
 
@@ -2334,7 +2334,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent('''
             Default behavior:
-              %(prog)s                     -> input.sv → output.py
+              %(prog)s                     -> input.sv -> output.py
 
             Examples:
               %(prog)s input.sv
