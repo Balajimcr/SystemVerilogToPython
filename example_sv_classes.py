@@ -58,11 +58,11 @@ class IspYuv2rgbCfg:
 
     def __init__(self):
         self.enable = vsc.rand_bit_t(1)
-        self.yuv_format = vsc.rand_enum_t(YuvFormat)
-        self.yuv_packing = vsc.rand_enum_t(YuvPacking)
-        self.color_space = vsc.rand_enum_t(ColorSpace)
-        self.range_mode = vsc.rand_enum_t(RangeMode)
-        self.rgb_format = vsc.rand_enum_t(RgbFormat)
+        self.yuv_format = vsc.rand_int32_t()
+        self.yuv_packing = vsc.rand_int32_t()
+        self.color_space = vsc.rand_int32_t()
+        self.range_mode = vsc.rand_int32_t()
+        self.rgb_format = vsc.rand_int32_t()
         self.width = vsc.rand_uint32_t()
         self.height = vsc.rand_uint32_t()
         self.chroma_enabled = vsc.rand_bit_t(1)

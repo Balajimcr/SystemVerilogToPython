@@ -68,13 +68,13 @@ class isp_yuv2rgb_cfg;
     // ------------------------------------------------------------------------
     // Core Controls
     // ------------------------------------------------------------------------
-    rand bit                 enable;
-    rand yuv_format_e        yuv_format;
-    rand yuv_packing_e       yuv_packing;
-    rand bit_depth_e         yuv_bit_depth;
-    rand color_space_e       color_space;
-    rand range_mode_e        range_mode;
-    rand rgb_format_e        rgb_format;
+    rand bit enable;
+    rand int yuv_format;
+    rand int yuv_packing;
+    rand int yuv_bit_depth;
+    rand int color_space;
+    rand int range_mode;
+    rand int rgb_format;
 
     // ------------------------------------------------------------------------
     // Frame Geometry
