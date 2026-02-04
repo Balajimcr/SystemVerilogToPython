@@ -1,427 +1,272 @@
-// ============================================================
-// Small representative SV test based on real Isp_rand_item
-// ============================================================
+// ============================================================================
+// ISP YUV → RGB Golden Constraint Model
+// ----------------------------------------------------------------------------
+// Purpose:
+//   - Canonical SystemVerilog example for YUV→RGB conversion configuration
+//   - Exhaustively models formats, packing, bit-depths, and color standards
+//   - Designed for clean SV → pyvsc translation
+//
+// NOTES:
+//   - NOT synthesizable RTL
+//   - Constraint-driven architectural / stimulus model
+//   - All solve-order statements are written LAST (golden rule)
+//
+// ============================================================================
 
-class Isp_rand_item_small extends uvm_sequence_item;
+// ============================================================================
+// ENUMERATIONS
+// ============================================================================
 
-    // ========================================================
-    // ADDITIONAL TRANSLATION-COVERAGE FIELDS (ADDED ON TOP)
-    // ========================================================
+// -------------------- YUV Format --------------------
+typedef enum int {
+    YUV_444 = 0,
+    YUV_422 = 1,
+    YUV_420 = 2
+} yuv_format_e;
 
-    // rand int
-    rand bit signed [31:0] TestRandInt;
+// -------------------- YUV Packing --------------------
+typedef enum int {
+    YUV_PLANAR = 0,
+    YUV_SEMI_PLANAR,
+    YUV_PACKED
+} yuv_packing_e;
 
-    rand bit [3:0] TestRandNibble;
+// -------------------- Color Space --------------------
+typedef enum int {
+    CS_BT601 = 0,
+    CS_BT709,
+    CS_BT2020
+} color_space_e;
 
-    // rand enum
-    typedef enum int {TEST_ENUM_0, TEST_ENUM_1, TEST_ENUM_2} test_enum_t;
-    rand test_enum_t TestEnum;
+// -------------------- Bit Depth --------------------
+typedef enum int {
+    BIT_8  = 8,
+    BIT_10 = 10,
+    BIT_12 = 12
+} bit_depth_e;
 
-    // fixed-size array
-    rand bit [7:0] TestFixedArr [4];
+// -------------------- RGB Output --------------------
+typedef enum int {
+    RGB_888 = 0,
+    RGB_101010,
+    RGB_121212
+} rgb_format_e;
 
-    // dynamic array
-    rand bit [15:0] TestDynArr [];
+// -------------------- Range Mode --------------------
+typedef enum int {
+    FULL_RANGE = 0,
+    LIMITED_RANGE
+} range_mode_e;
 
-    // ========================================================
-    // ADDITIONAL TRANSLATION-COVERAGE CONSTRAINTS (ADDED ON TOP)
-    // ========================================================
 
-    // --------------------------------------------------------
-    // rand int range (>= && <=)
-    // --------------------------------------------------------
-    constraint CR_TEST_RAND_INT_RANGE {
-        TestRandInt >= 10 && TestRandInt <= 20;
+// ============================================================================
+// MAIN CONFIGURATION CLASS
+// ============================================================================
+
+class isp_yuv2rgb_cfg;
+
+    // ------------------------------------------------------------------------
+    // Core Controls
+    // ------------------------------------------------------------------------
+    rand bit                 enable;
+    rand yuv_format_e        yuv_format;
+    rand yuv_packing_e       yuv_packing;
+    rand bit_depth_e         yuv_bit_depth;
+    rand color_space_e       color_space;
+    rand range_mode_e        range_mode;
+    rand rgb_format_e        rgb_format;
+
+    // ------------------------------------------------------------------------
+    // Frame Geometry
+    // ------------------------------------------------------------------------
+    rand int unsigned        width;
+    rand int unsigned        height;
+
+    // ------------------------------------------------------------------------
+    // Feature Enables
+    // ------------------------------------------------------------------------
+    rand bit                 chroma_enabled;
+    rand bit                 dither_enable;
+    rand bit                 clip_enable;
+
+    // ------------------------------------------------------------------------
+    // YUV → RGB Matrix (signed fixed-point)
+    // ------------------------------------------------------------------------
+    rand int signed          c00, c01, c02;
+    rand int signed          c10, c11, c12;
+    rand int signed          c20, c21, c22;
+
+    // ------------------------------------------------------------------------
+    // Offsets
+    // ------------------------------------------------------------------------
+    rand int signed          y_offset;
+    rand int signed          uv_offset;
+
+    // ========================================================================
+    // BASIC RANGES
+    // ========================================================================
+
+    constraint cr_basic_ranges {
+        enable inside {0,1};
+        width  inside {[64:8192]};
+        height inside {[64:8192]};
     }
 
-    // --------------------------------------------------------
-    // inside {[a:b]} and inside {v1,v2}
-    // --------------------------------------------------------
-    constraint CR_TEST_INSIDE_FORMS {
-        TestRandInt inside {[5:15]};
-        TestRandNibble inside {4'h0, 4'hF, 4'hA};
+    // ========================================================================
+    // FORMAT vs PACKING RULES
+    // ========================================================================
+
+    constraint cr_format_packing {
+
+        (yuv_packing == YUV_PACKED) -> (yuv_format != YUV_420);
+        (yuv_format  == YUV_420)    -> (yuv_packing != YUV_PACKED);
+        (yuv_packing == YUV_PLANAR) -> 1;
     }
 
-    // --------------------------------------------------------
-    // implication (A -> B)
-    // --------------------------------------------------------
-    constraint CR_TEST_IMPLICATION {
-        (TestRandNibble == 4'hF) -> (TestRandInt == 42);
+    // ========================================================================
+    // BIT DEPTH RULES
+    // ========================================================================
+
+    constraint cr_bit_depth {
+
+        (yuv_packing == YUV_PACKED) ->
+            (yuv_bit_depth inside {BIT_8, BIT_10});
+
+        (rgb_format == RGB_888)    -> (yuv_bit_depth == BIT_8);
+        (rgb_format == RGB_101010) -> (yuv_bit_depth inside {BIT_10, BIT_12});
+        (rgb_format == RGB_121212) -> (yuv_bit_depth == BIT_12);
     }
 
-    // --------------------------------------------------------
-    // foreach constraint
-    // --------------------------------------------------------
-    constraint CR_TEST_FOREACH {
-        foreach (TestFixedArr[i]) {
-            TestFixedArr[i] >= i;
-            TestFixedArr[i] <= 8'hFF;
+    // ========================================================================
+    // CHROMA ENABLE LOGIC
+    // ========================================================================
+
+    constraint cr_chroma {
+
+        (yuv_format == YUV_444) ->
+            (chroma_enabled == 1);
+
+        (yuv_format inside {YUV_422, YUV_420}) ->
+            (chroma_enabled inside {0,1});
+    }
+
+    // ========================================================================
+    // COLOR SPACE → MATRIX COEFFICIENTS
+    // ========================================================================
+
+    constraint cr_color_matrix {
+
+        if (color_space == CS_BT601) {
+            c00 ==  298;  c01 ==    0;  c02 ==  409;
+            c10 ==  298;  c11 == -100;  c12 == -208;
+            c20 ==  298;  c21 ==  516;  c22 ==    0;
         }
+        else if (color_space == CS_BT709) {
+            c00 ==  298;  c01 ==    0;  c02 ==  459;
+            c10 ==  298;  c11 ==  -55;  c12 == -136;
+            c20 ==  298;  c21 ==  541;  c22 ==    0;
+        }
+        else {
+            c00 ==  298;  c01 ==    0;  c02 ==  483;
+            c10 ==  298;  c11 ==  -57;  c12 == -157;
+            c20 ==  298;  c21 ==  565;  c22 ==    0;
+        }
+
+        // ---- SOLVE ORDER (LAST) ----
+        solve color_space before c00;
+        solve color_space before c01;
+        solve color_space before c02;
+        solve color_space before c10;
+        solve color_space before c11;
+        solve color_space before c12;
+        solve color_space before c20;
+        solve color_space before c21;
+        solve color_space before c22;
     }
 
-    // --------------------------------------------------------
-    // unique constraint
-    // --------------------------------------------------------
-    constraint CR_TEST_UNIQUE {
-        unique {TestFixedArr};
+    // ========================================================================
+    // OFFSET SELECTION
+    // ========================================================================
+
+    constraint cr_offsets {
+
+        if (range_mode == FULL_RANGE) {
+            y_offset  == 0;
+            uv_offset == (1 << (yuv_bit_depth-1));
+        }
+        else {
+            y_offset  == (16  << (yuv_bit_depth-8));
+            uv_offset == (128 << (yuv_bit_depth-8));
+        }
+
+        // ---- SOLVE ORDER ----
+        solve range_mode    before y_offset;
+        solve range_mode    before uv_offset;
+        solve yuv_bit_depth before y_offset;
+        solve yuv_bit_depth before uv_offset;
     }
 
-    // --------------------------------------------------------
-    // dynamic array size
-    // --------------------------------------------------------
-    constraint CR_TEST_DYN_ARRAY {
-        TestDynArr.size() inside {[1:8]};
+    // ========================================================================
+    // DITHERING & CLIPPING
+    // ========================================================================
+
+    constraint cr_dither_clip {
+
+        ((yuv_bit_depth > BIT_8) && (rgb_format == RGB_888))
+            -> (dither_enable == 1);
+
+        !((yuv_bit_depth > BIT_8) && (rgb_format == RGB_888))
+            -> (dither_enable inside {0,1});
+
+        (range_mode == LIMITED_RANGE) ->
+            (clip_enable == 1);
+
+        // ---- SOLVE ORDER ----
+        solve yuv_bit_depth before dither_enable;
+        solve rgb_format    before dither_enable;
+        solve range_mode    before clip_enable;
     }
 
-    // --------------------------------------------------------
-    // soft constraint
-    // --------------------------------------------------------
-    constraint CR_TEST_SOFT {
-        soft TestRandInt == 12;
+    // ========================================================================
+    // DIMENSION ALIGNMENT (SUBSAMPLING)
+    // ========================================================================
+
+    constraint cr_dimension_alignment {
+
+        (yuv_format == YUV_420) ->
+            ((width % 2 == 0) && (height % 2 == 0));
+
+        (yuv_format == YUV_422) ->
+            (width % 2 == 0);
+
+        // ---- SOLVE ORDER ----
+        solve yuv_format before width;
+        solve yuv_format before height;
     }
 
-    // --------------------------------------------------------
-    // distribution (dist)
-    // --------------------------------------------------------
-    constraint CR_TEST_DIST {
-        TestRandInt dist {
-            10 := 10,
-            15 := 30,
-            20 := 60
+    // ========================================================================
+    // REALISTIC DISTRIBUTIONS
+    // ========================================================================
+
+    constraint cr_distributions {
+
+        yuv_format dist {
+            YUV_444 := 20,
+            YUV_422 := 50,
+            YUV_420 := 30
         };
-    }
 
-    // --------------------------------------------------------
-    // multiple solve – fan-in
-    // --------------------------------------------------------
-    constraint CR_TEST_MULTI_SOLVE_FANIN {
-        if (TestEnum == TEST_ENUM_1)
-            TestRandInt == 15;
+        yuv_bit_depth dist {
+            BIT_8  := 60,
+            BIT_10 := 30,
+            BIT_12 := 10
+        };
 
-        solve TestEnum        before TestRandInt;
-        solve TestRandNibble before TestRandInt;
-    }
-
-    // --------------------------------------------------------
-    // multiple solve – fan-out
-    // --------------------------------------------------------
-    constraint CR_TEST_MULTI_SOLVE_FANOUT {
-        if (TestRandInt == 20)
-            TestRandNibble == 4'hA;
-            TestEnum == TEST_ENUM_2;        
-
-        solve TestRandInt before TestRandNibble;
-        solve TestRandInt before TestEnum;
-    }
-
-    // ========================================================
-    // ================= ORIGINAL CONTENT (UNCHANGED) ==========
-    // ========================================================
-
-    // --------------------------------------------------------
-    // Core control fields
-    // --------------------------------------------------------
-    rand bit [31:0] IsIspBypassMode;
-    rand bit [31:0] IsIspYuvFormat;
-    rand bit [31:0] IsIspSrcCompType;
-    rand bit [31:0] IsIspDstCompType;
-    rand bit [31:0] IsIspInBittageType;
-    rand bit [31:0] IsIspOutBittageType;
-
-    rand bit [31:0] IsRdmaDataFormatYuv;
-    rand bit [31:0] IsWdmaDataFormatYuv;
-
-    // --------------------------------------------------------
-    // Signed variable test cases
-    // --------------------------------------------------------
-    rand bit signed [31:0] isp_grid_2d_0_0;
-    rand bit signed [31:0] isp_grid_2d_0_1;
-    rand bit signed [31:0] isp_grid_2d_0_2;
-    rand bit signed [31:0] isp_grid_2d_0_3;
-    rand bit signed [31:0] isp_grid_2d_0_4;
-    rand bit signed [31:0] isp_grid_2d_0_6;
-
-    // --------------------------------------------------------
-    // UVM registration (kept minimal)
-    // --------------------------------------------------------
-    `uvm_object_utils_begin(Isp_rand_item_small)
-        `uvm_field_int(IsIspBypassMode,        UVM_DEFAULT)
-        `uvm_field_int(IsIspYuvFormat,         UVM_DEFAULT)
-        `uvm_field_int(IsIspSrcCompType,       UVM_DEFAULT)
-        `uvm_field_int(IsIspDstCompType,       UVM_DEFAULT)
-        `uvm_field_int(IsIspInBittageType,     UVM_DEFAULT)
-        `uvm_field_int(IsIspOutBittageType,    UVM_DEFAULT)
-        `uvm_field_int(IsRdmaDataFormatYuv,    UVM_DEFAULT)
-        `uvm_field_int(IsWdmaDataFormatYuv,    UVM_DEFAULT)
-    `uvm_object_utils_end
-
-    // --------------------------------------------------------
-    // Basic range constraints (from real code)
-    // --------------------------------------------------------
-
-    constraint CR_VAR_RANGE_IsIspBypassMode {
-        IsIspBypassMode >= 0 && IsIspBypassMode <= 1;
-    }
-
-    constraint CR_VAR_RANGE_IsIspYuvFormat {
-        IsIspYuvFormat >= 0 && IsIspYuvFormat <= 1;
-    }
-
-    constraint CR_VAR_RANGE_IsIspSrcCompType {
-        IsIspSrcCompType >= 0 && IsIspSrcCompType <= 2;
-    }
-
-    constraint CR_VAR_RANGE_IsIspDstCompType {
-        IsIspDstCompType >= 0 && IsIspDstCompType <= 2;
-    }
-
-    constraint CR_VAR_RANGE_IsIspInBittageType {
-        IsIspInBittageType >= 0 && IsIspInBittageType <= 3;
-    }
-
-    constraint CR_VAR_RANGE_IsIspOutBittageType {
-        IsIspOutBittageType >= 0 && IsIspOutBittageType <= 3;
-    }
-
-    // --------------------------------------------------------
-    // Conditional + inside + solve-order (cr1 equivalent)
-    // --------------------------------------------------------
-
-    constraint cr1 {
-        if (IsRdmaDataFormatYuv inside {4, 5, 16, 17, 20, 21})
-            IsIspYuvFormat == 0;
-        else
-            IsIspYuvFormat == 1;
-
-        solve IsRdmaDataFormatYuv before IsIspYuvFormat;
-    }
-
-    // --------------------------------------------------------
-    // Conditional + inside + solve-order (cr4 equivalent)
-    // --------------------------------------------------------
-
-    constraint cr4 {
-        if (IsIspBypassMode)
-            IsIspSrcCompType inside {0, 1};
-
-        solve IsIspBypassMode before IsIspSrcCompType;
-    }
-
-    // --------------------------------------------------------
-    // Equality dependency + solve-order (cr5 equivalent)
-    // --------------------------------------------------------
-
-    constraint cr5 {
-        if (IsIspBypassMode)
-            IsIspDstCompType == IsIspSrcCompType;
-
-        solve IsIspBypassMode before IsIspDstCompType;
-        solve IsIspSrcCompType before IsIspDstCompType;
-        solve IsIspYuvFormat before IsIspSrcCompType;
-        solve IsIspDstCompType before IsIspInBittageType;
-        solve IsIspInBittageType before IsIspOutBittageType;
-    }
-
-    // --------------------------------------------------------
-    // Multi-branch conditional + solve-order (cr6 equivalent)
-    // --------------------------------------------------------
-
-    constraint cr6 {
-        if (IsRdmaDataFormatYuv inside {4, 5, 7, 8})
-            IsIspInBittageType == 0;
-        else if (IsRdmaDataFormatYuv inside {16, 17, 32, 33})
-            IsIspInBittageType == 1;
-        else
-            IsIspInBittageType == 3;
-
-        solve IsRdmaDataFormatYuv before IsIspInBittageType;
-        solve IsIspYuvFormat before IsIspSrcCompType;
-        solve IsIspSrcCompType before IsIspDstCompType;
-        solve IsIspDstCompType before IsIspInBittageType;
-        solve IsIspInBittageType before IsIspOutBittageType;
-    }
-
-    // --------------------------------------------------------
-    // Cascaded dependency (cr7 equivalent)
-    // --------------------------------------------------------
-
-    constraint cr7 {
-        if (IsIspInBittageType == 0)
-            IsIspOutBittageType == 0;
-        else if (IsIspDstCompType > 0)
-            IsIspOutBittageType == 1;
-        else
-            IsIspOutBittageType inside {1, 3};
-
-        solve IsIspInBittageType before IsIspOutBittageType;
-        solve IsIspDstCompType before IsIspOutBittageType;
-        solve IsIspYuvFormat before IsIspSrcCompType;
-        solve IsIspSrcCompType before IsIspDstCompType;
-        solve IsIspDstCompType before IsIspInBittageType;
-        solve IsIspInBittageType before IsIspOutBittageType;
-    }
-
-    // --------------------------------------------------------
-    // Test constraint with many solve orders in specific sequence
-    // --------------------------------------------------------
-
-    constraint cr8_solve_order_test {
-        if (IsIspBypassMode)
-            IsIspYuvFormat == 0;
-        else
-            IsIspYuvFormat == 1;
-
-        solve IsRdmaDataFormatYuv before IsWdmaDataFormatYuv;
-        solve IsIspBypassMode before IsIspYuvFormat;
-        solve IsIspYuvFormat before IsIspSrcCompType;
-        solve IsIspSrcCompType before IsIspDstCompType;
-        solve IsIspDstCompType before IsIspInBittageType;
-        solve IsIspInBittageType before IsIspOutBittageType;
-    }
-
-    // --------------------------------------------------------
-    // Signed variable constraints (testing negative ranges)
-    // --------------------------------------------------------
-
-    constraint CR_SIGNED_RANGE_isp_grid_2d {
-        isp_grid_2d_0_0 >= -1024 && isp_grid_2d_0_0 <= 1023;
-        isp_grid_2d_0_1 >= -1024 && isp_grid_2d_0_1 <= 1023;
-        isp_grid_2d_0_2 >= -512 && isp_grid_2d_0_2 <= 511;
-        isp_grid_2d_0_3 >= -512 && isp_grid_2d_0_3 <= 511;
-        isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
-        isp_grid_2d_0_6 >= -2048 && isp_grid_2d_0_6 <= 2047;
-    }
-
-    // --------------------------------------------------------
-    // Test single & and | operators
-    // --------------------------------------------------------
-
-    constraint cr9_single_logical_ops {
-        (IsIspBypassMode == 1) & (IsIspYuvFormat == 0);
-        (IsIspSrcCompType == 0) | (IsIspDstCompType == 1);
-        (IsIspInBittageType >= 0) & (IsIspInBittageType <= 2) | (IsIspOutBittageType == 3);
-    }
-
-    // --------------------------------------------------------
-    // Test bit slicing constraints
-    // --------------------------------------------------------
-
-    constraint cr10_bit_slice {
-        IsIspBypassMode[3:0] == 0;
-    }
-
-    constraint cr11_bit_slice {
-        IsIspYuvFormat[7:4] == 0;
-    }
-
-    constraint cr12_bit_slice {
-        IsIspSrcCompType[15:0] == IsIspDstCompType[15:0];
-    }
-
-    // --------------------------------------------------------
-    // Test parenthesized range constraints
-    // --------------------------------------------------------
-
-    constraint cr13_paren_range {
-        (isp_grid_2d_0_0 >= -8388607 && isp_grid_2d_0_0 <= 8388607);
-    }
-
-    constraint cr14_paren_range {
-        (isp_grid_2d_0_1 >= -8388607 && isp_grid_2d_0_1 <= 8388607);
-    }
-
-    // --------------------------------------------------------
-    // Test logical operator conversions: && -> &, || -> |, ! -> ~
-    // --------------------------------------------------------
-
-    constraint cr15_logical_and {
-        // && should convert to &
-        (IsIspBypassMode == 1) && (IsIspYuvFormat == 1);
-    }
-
-    constraint cr16_logical_or {
-        // || should convert to |
-        (IsIspSrcCompType == 0) || (IsIspSrcCompType == 1);
-    }
-
-    constraint cr17_logical_not {
-        // ! should convert to ~
-        !(IsIspBypassMode == 0);
-    }
-
-    constraint cr18_complex_logical {
-        // Complex: !(a && b) -> ~(a & b)
-        !((IsIspBypassMode == 1) && (IsIspYuvFormat == 0));
-    }
-
-    constraint cr19_complex_logical_or {
-        // Complex: !(a || b) -> ~(a | b)
-        !((IsIspSrcCompType == 2) || (IsIspDstCompType == 2));
-    }
-
-    constraint cr20_mixed_logical {
-        // Mixed operators
-        ((IsIspBypassMode == 1) && (IsIspYuvFormat == 0)) || (IsIspSrcCompType == 2);
-    }
-
-    // --------------------------------------------------------
-    // Test begin...end block handling
-    // --------------------------------------------------------
-
-    constraint cr21_begin_end_block {
-        if (TestRandInt == 15) begin
-            TestRandNibble == 4'hB;
-            TestEnum == TEST_ENUM_1;
-        end
-        solve TestRandInt before TestRandNibble;
-        solve TestRandInt before TestEnum;
-    }
-
-    constraint cr22_begin_end_else {
-        if (IsIspBypassMode == 1) begin
-            IsIspYuvFormat == 0;
-            IsIspSrcCompType == 1;
-        end else begin
-            IsIspYuvFormat == 1;
-            IsIspSrcCompType == 0;
-        end
-        solve IsIspBypassMode before IsIspYuvFormat;
-        solve IsIspBypassMode before IsIspSrcCompType;
-    }
-
-    // --------------------------------------------------------
-    // Test foreach with inside
-    // --------------------------------------------------------
-
-    constraint cr23_foreach_inside {
-        foreach (TestFixedArr[j]) {
-            TestFixedArr[j] inside {[0:100]};
-        }
-    }
-
-    // --------------------------------------------------------
-    // Test implication with inside
-    // --------------------------------------------------------
-
-    constraint cr24_impl_inside {
-        (TestRandNibble == 4'hC) -> (TestRandInt inside {[10:30]});
-    }
-
-    // --------------------------------------------------------
-    // Test negated inside
-    // --------------------------------------------------------
-
-    constraint cr25_negated_inside {
-        !(TestRandNibble inside {4'h0, 4'h1, 4'h2});
-    }
-
-    // --------------------------------------------------------
-    // Test randc field
-    // --------------------------------------------------------
-    randc bit [3:0] TestRandcNibble;
-
-    constraint cr26_randc_test {
-        TestRandcNibble inside {[0:10]};
+        color_space dist {
+            CS_BT601  := 40,
+            CS_BT709  := 40,
+            CS_BT2020 := 20
+        };
     }
 
 endclass

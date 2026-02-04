@@ -17,270 +17,184 @@ from enum import IntEnum
 import random
 from typing import Optional
 
-class TestEnum(IntEnum):
-    """Translated from SV enum: test_enum_t"""
-    TEST_ENUM_0 = 0
-    TEST_ENUM_1 = 1
-    TEST_ENUM_2 = 2
+class YuvFormat(IntEnum):
+    """Translated from SV enum: yuv_format_e"""
+    YUV_444 = 0
+    YUV_422 = 1
+    YUV_420 = 2
 
-# =============================================================================
-# BASE CLASS STUBS (from UVM or other libraries)
-# Replace these with actual implementations or imports as needed
-# =============================================================================
+class YuvPacking(IntEnum):
+    """Translated from SV enum: yuv_packing_e"""
+    YUV_PLANAR = 0
+    YUV_SEMI_PLANAR = 1
+    YUV_PACKED = 2
+
+class ColorSpace(IntEnum):
+    """Translated from SV enum: color_space_e"""
+    CS_BT601 = 0
+    CS_BT709 = 1
+    CS_BT2020 = 2
+
+class BitDepth(IntEnum):
+    """Translated from SV enum: bit_depth_e"""
+    BIT_8 = 8
+    BIT_10 = 10
+    BIT_12 = 12
+
+class RgbFormat(IntEnum):
+    """Translated from SV enum: rgb_format_e"""
+    RGB_888 = 0
+    RGB_101010 = 1
+    RGB_121212 = 2
+
+class RangeMode(IntEnum):
+    """Translated from SV enum: range_mode_e"""
+    FULL_RANGE = 0
+    LIMITED_RANGE = 1
 
 @vsc.randobj
-class UvmSequenceItem:
-    """
-    Stub for uvm_sequence_item base class.
-    Replace with actual implementation or import from your UVM library.
-    """
-    def __init__(self):
-        pass  # TODO: Add base class fields if needed
-
-
-@vsc.randobj
-class IspRandItemSmall(UvmSequenceItem):
-    """Translated from SV class: Isp_rand_item_small"""
+class IspYuv2rgbCfg:
+    """Translated from SV class: isp_yuv2rgb_cfg"""
 
     def __init__(self):
-        super().__init__()
-        self.TestRandInt = vsc.rand_int_t(32)
-        self.TestRandNibble = vsc.rand_bit_t(4)
-        self.TestEnum = vsc.rand_enum_t(TestEnum)
-        self.TestFixedArr = vsc.rand_list_t(vsc.bit_t(8), sz=4)
-        self.TestDynArr = vsc.rand_list_t(vsc.bit_t(16))
-        self.IsIspBypassMode = vsc.rand_bit_t(32)
-        self.IsIspYuvFormat = vsc.rand_bit_t(32)
-        self.IsIspSrcCompType = vsc.rand_bit_t(32)
-        self.IsIspDstCompType = vsc.rand_bit_t(32)
-        self.IsIspInBittageType = vsc.rand_bit_t(32)
-        self.IsIspOutBittageType = vsc.rand_bit_t(32)
-        self.IsRdmaDataFormatYuv = vsc.rand_bit_t(32)
-        self.IsWdmaDataFormatYuv = vsc.rand_bit_t(32)
-        self.isp_grid_2d_0_0 = vsc.rand_int_t(32)
-        self.isp_grid_2d_0_1 = vsc.rand_int_t(32)
-        self.isp_grid_2d_0_2 = vsc.rand_int_t(32)
-        self.isp_grid_2d_0_3 = vsc.rand_int_t(32)
-        self.isp_grid_2d_0_4 = vsc.rand_int_t(32)
-        self.isp_grid_2d_0_6 = vsc.rand_int_t(32)
-        self.TestRandcNibble = vsc.randc_bit_t(4)
+        self.enable = vsc.rand_bit_t(1)
+        self.yuv_format = vsc.rand_enum_t(YuvFormat)
+        self.yuv_packing = vsc.rand_enum_t(YuvPacking)
+        self.color_space = vsc.rand_enum_t(ColorSpace)
+        self.range_mode = vsc.rand_enum_t(RangeMode)
+        self.rgb_format = vsc.rand_enum_t(RgbFormat)
+        self.width = vsc.rand_uint_t(32)
+        self.height = vsc.rand_uint_t(32)
+        self.chroma_enabled = vsc.rand_bit_t(1)
+        self.dither_enable = vsc.rand_bit_t(1)
+        self.clip_enable = vsc.rand_bit_t(1)
 
     @vsc.constraint
-    def parameter_range(self):
-        self.TestRandInt in vsc.rangelist(vsc.rng(10, 20))
-        self.IsIspBypassMode in vsc.rangelist(vsc.rng(0, 1))
-        self.IsIspYuvFormat in vsc.rangelist(vsc.rng(0, 1))
-        self.IsIspSrcCompType in vsc.rangelist(vsc.rng(0, 2))
-        self.IsIspDstCompType in vsc.rangelist(vsc.rng(0, 2))
-        self.IsIspInBittageType in vsc.rangelist(vsc.rng(0, 3))
-        self.IsIspOutBittageType in vsc.rangelist(vsc.rng(0, 3))
-        self.isp_grid_2d_0_0 in vsc.rangelist(vsc.rng(-8388607, 8388607))
-        self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-8388607, 8388607))
+    def cr_basic_ranges(self):
+        self.enable in vsc.rangelist(0, 1)
+        self.width in vsc.rangelist(vsc.rng(64, 8192))
+        self.height in vsc.rangelist(vsc.rng(64, 8192))
 
     @vsc.constraint
-    def CR_TEST_INSIDE_FORMS(self):
-        self.TestRandInt in vsc.rangelist(vsc.rng(5, 15))
-        self.TestRandNibble in vsc.rangelist(0x0, 0xF, 0xA)
+    def cr_format_packing(self):
+        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
+            (self.yuv_format != YuvFormat.YUV_420)
+        with vsc.implies((self.yuv_format  == YuvFormat.YUV_420)):
+            (self.yuv_packing != YuvPacking.YUV_PACKED)
+        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PLANAR)):
+            1
 
     @vsc.constraint
-    def CR_TEST_IMPLICATION(self):
-        with vsc.implies((self.TestRandNibble == 0xF)):
-            (self.TestRandInt == 42)
+    def cr_bit_depth(self):
+        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
+            self.yuv_bit_depth in vsc.rangelist(BIT_8, BIT_10)
+        with vsc.implies((self.rgb_format == RgbFormat.RGB_888)):
+            (self.yuv_bit_depth == BitDepth.BIT_8)
+        with vsc.implies((self.rgb_format == RgbFormat.RGB_101010)):
+            self.yuv_bit_depth in vsc.rangelist(BIT_10, BIT_12)
+        with vsc.implies((self.rgb_format == RgbFormat.RGB_121212)):
+            (self.yuv_bit_depth == BitDepth.BIT_12)
 
     @vsc.constraint
-    def CR_TEST_FOREACH(self):
-        with vsc.foreach(self.TestFixedArr, idx=True) as i:
-            self.TestFixedArr[i] >= i
-            self.TestFixedArr[i] <= 0xFF
+    def cr_chroma(self):
+        with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
+            (self.chroma_enabled == 1)
+        with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
+            self.chroma_enabled in vsc.rangelist(0, 1)
 
     @vsc.constraint
-    def CR_TEST_UNIQUE(self):
-        vsc.unique(self.TestFixedArr)
+    def cr_color_matrix(self):
+        vsc.solve_order(self.color_space, self.c00)
+        vsc.solve_order(self.color_space, self.c01)
+        vsc.solve_order(self.color_space, self.c02)
+        vsc.solve_order(self.color_space, self.c10)
+        vsc.solve_order(self.color_space, self.c11)
+        vsc.solve_order(self.color_space, self.c12)
+        vsc.solve_order(self.color_space, self.c20)
+        vsc.solve_order(self.color_space, self.c21)
+        vsc.solve_order(self.color_space, self.c22)
+        with vsc.if_then(self.color_space == ColorSpace.CS_BT601):
+            self.c00 ==  298
+            self.c01 ==    0
+            self.c02 ==  409
+            self.c10 ==  298
+            self.c11 == -100
+            self.c12 == -208
+            self.c20 ==  298
+            self.c21 ==  516
+            self.c22 ==    0
+        with vsc.else_if(self.color_space == ColorSpace.CS_BT709):
+            self.c00 ==  298
+            self.c01 ==    0
+            self.c02 ==  459
+            self.c10 ==  298
+            self.c11 ==  -55
+            self.c12 == -136
+            self.c20 ==  298
+            self.c21 ==  541
+            self.c22 ==    0
+        with vsc.else_then:
+            self.c00 ==  298
+            self.c01 ==    0
+            self.c02 ==  483
+            self.c10 ==  298
+            self.c11 ==  -57
+            self.c12 == -157
+            self.c20 ==  298
+            self.c21 ==  565
+            self.c22 ==    0
 
     @vsc.constraint
-    def CR_TEST_DYN_ARRAY(self):
-        self.TestDynArr.size in vsc.rangelist(vsc.rng(1, 8))
+    def cr_offsets(self):
+        vsc.solve_order(self.range_mode, self.y_offset)
+        vsc.solve_order(self.range_mode, self.uv_offset)
+        vsc.solve_order(self.yuv_bit_depth, self.y_offset)
+        vsc.solve_order(self.yuv_bit_depth, self.uv_offset)
+        with vsc.if_then(self.range_mode == RangeMode.FULL_RANGE):
+            self.y_offset  == 0
+            self.uv_offset == (1 << (self.yuv_bit_depth-1))
+        with vsc.else_then:
+            self.y_offset  == (16  << (self.yuv_bit_depth-8))
+            self.uv_offset == (128 << (self.yuv_bit_depth-8))
 
     @vsc.constraint
-    def CR_TEST_SOFT(self):
-        vsc.soft(self.TestRandInt == 12)
+    def cr_dither_clip(self):
+        vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
+        vsc.solve_order(self.rgb_format, self.dither_enable)
+        vsc.solve_order(self.range_mode, self.clip_enable)
+        with vsc.implies(((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
+            (self.dither_enable == 1)
+        with vsc.implies(~((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
+            self.dither_enable in vsc.rangelist(0, 1)
+        with vsc.implies((self.range_mode == RangeMode.LIMITED_RANGE)):
+            (self.clip_enable == 1)
 
     @vsc.constraint
-    def CR_TEST_DIST(self):
-        vsc.dist(self.TestRandInt, [
-            vsc.weight(10, 10),
-            vsc.weight(15, 30),
-            vsc.weight(20, 60),
+    def cr_dimension_alignment(self):
+        vsc.solve_order(self.yuv_format, self.width)
+        vsc.solve_order(self.yuv_format, self.height)
+        with vsc.implies((self.yuv_format == YuvFormat.YUV_420)):
+            ((self.width % 2 == 0) & (self.height % 2 == 0))
+        with vsc.implies((self.yuv_format == YuvFormat.YUV_422)):
+            (self.width % 2 == 0)
+
+    @vsc.constraint
+    def cr_distributions(self):
+        vsc.dist(self.yuv_format, [
+            vsc.weight(YUV_444, 20),
+            vsc.weight(YUV_422, 50),
+            vsc.weight(YUV_420, 30),
         ])
-
-    @vsc.constraint
-    def CR_TEST_MULTI_SOLVE_FANIN(self):
-        vsc.solve_order(self.TestEnum, self.TestRandInt)
-        vsc.solve_order(self.TestRandNibble, self.TestRandInt)
-        with vsc.if_then(self.TestEnum == TestEnum.TEST_ENUM_1):
-            self.TestRandInt == 15
-
-    @vsc.constraint
-    def CR_TEST_MULTI_SOLVE_FANOUT(self):
-        vsc.solve_order(self.TestRandInt, self.TestRandNibble)
-        vsc.solve_order(self.TestRandInt, self.TestEnum)
-        with vsc.if_then(self.TestRandInt == 20):
-            self.TestRandNibble == 0xA
-        self.TestEnum == TestEnum.TEST_ENUM_2
-
-    @vsc.constraint
-    def cr1(self):
-        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspYuvFormat)
-        with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 16, 17, 20, 21)):
-            self.IsIspYuvFormat == 0
-        with vsc.else_then:
-            self.IsIspYuvFormat == 1
-
-    @vsc.constraint
-    def cr4(self):
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
-        with vsc.if_then((self.IsIspBypassMode != 0)):
-            self.IsIspSrcCompType in vsc.rangelist(0, 1)
-
-    @vsc.constraint
-    def cr5(self):
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspDstCompType)
-        vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
-        vsc.solve_order(self.IsIspYuvFormat, self.IsIspSrcCompType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspInBittageType)
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        with vsc.if_then((self.IsIspBypassMode != 0)):
-            self.IsIspDstCompType == self.IsIspSrcCompType
-
-    @vsc.constraint
-    def cr6(self):
-        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspInBittageType)
-        vsc.solve_order(self.IsIspYuvFormat, self.IsIspSrcCompType)
-        vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspInBittageType)
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8)):
-            self.IsIspInBittageType == 0
-        with vsc.else_if(self.IsRdmaDataFormatYuv in vsc.rangelist(16, 17, 32, 33)):
-            self.IsIspInBittageType == 1
-        with vsc.else_then:
-            self.IsIspInBittageType == 3
-
-    @vsc.constraint
-    def cr7(self):
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspOutBittageType)
-        vsc.solve_order(self.IsIspYuvFormat, self.IsIspSrcCompType)
-        vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspInBittageType)
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        with vsc.if_then(self.IsIspInBittageType == 0):
-            self.IsIspOutBittageType == 0
-        with vsc.else_if(self.IsIspDstCompType > 0):
-            self.IsIspOutBittageType == 1
-        with vsc.else_then:
-            self.IsIspOutBittageType in vsc.rangelist(1, 3)
-
-    @vsc.constraint
-    def cr8_solve_order_test(self):
-        vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsWdmaDataFormatYuv)
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspYuvFormat)
-        vsc.solve_order(self.IsIspYuvFormat, self.IsIspSrcCompType)
-        vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
-        vsc.solve_order(self.IsIspDstCompType, self.IsIspInBittageType)
-        vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        with vsc.if_then((self.IsIspBypassMode != 0)):
-            self.IsIspYuvFormat == 0
-        with vsc.else_then:
-            self.IsIspYuvFormat == 1
-
-    @vsc.constraint
-    def CR_SIGNED_RANGE_isp_grid_2d(self):
-        self.isp_grid_2d_0_0 in vsc.rangelist(vsc.rng(-1024, 1023))
-        self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-1024, 1023))
-        self.isp_grid_2d_0_2 in vsc.rangelist(vsc.rng(-512, 511))
-        self.isp_grid_2d_0_3 in vsc.rangelist(vsc.rng(-512, 511))
-        self.isp_grid_2d_0_4 in vsc.rangelist(-100, -50, 0, 50, 100)
-        self.isp_grid_2d_0_6 in vsc.rangelist(vsc.rng(-2048, 2047))
-
-    @vsc.constraint
-    def cr9_single_logical_ops(self):
-        (self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0)
-        (self.IsIspSrcCompType == 0) | (self.IsIspDstCompType == 1)
-        (self.IsIspInBittageType >= 0) & (self.IsIspInBittageType <= 2) | (self.IsIspOutBittageType == 3)
-
-    @vsc.constraint
-    def cr10_bit_slice(self):
-        self.IsIspBypassMode[3:0] == 0
-
-    @vsc.constraint
-    def cr11_bit_slice(self):
-        self.IsIspYuvFormat[7:4] == 0
-
-    @vsc.constraint
-    def cr12_bit_slice(self):
-        self.IsIspSrcCompType[15:0] == self.IsIspDstCompType[15:0]
-
-    @vsc.constraint
-    def cr15_logical_and(self):
-        (self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 1)
-
-    @vsc.constraint
-    def cr16_logical_or(self):
-        (self.IsIspSrcCompType == 0) | (self.IsIspSrcCompType == 1)
-
-    @vsc.constraint
-    def cr17_logical_not(self):
-        ~(self.IsIspBypassMode == 0)
-
-    @vsc.constraint
-    def cr18_complex_logical(self):
-        ~((self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0))
-
-    @vsc.constraint
-    def cr19_complex_logical_or(self):
-        ~((self.IsIspSrcCompType == 2) | (self.IsIspDstCompType == 2))
-
-    @vsc.constraint
-    def cr20_mixed_logical(self):
-        ((self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0)) | (self.IsIspSrcCompType == 2)
-
-    @vsc.constraint
-    def cr21_begin_end_block(self):
-        vsc.solve_order(self.TestRandInt, self.TestRandNibble)
-        vsc.solve_order(self.TestRandInt, self.TestEnum)
-        with vsc.if_then(self.TestRandInt == 15):
-            self.TestRandNibble == 0xB
-            self.TestEnum == TestEnum.TEST_ENUM_1
-
-    @vsc.constraint
-    def cr22_begin_end_else(self):
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspYuvFormat)
-        vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
-        with vsc.if_then(self.IsIspBypassMode == 1):
-            self.IsIspYuvFormat == 0
-            self.IsIspSrcCompType == 1
-        with vsc.else_then:
-            self.IsIspYuvFormat == 1
-            self.IsIspSrcCompType == 0
-
-    @vsc.constraint
-    def cr23_foreach_inside(self):
-        with vsc.foreach(self.TestFixedArr, idx=True) as j:
-            self.TestFixedArr[j] in vsc.rangelist(vsc.rng(0, 100))
-
-    @vsc.constraint
-    def cr24_impl_inside(self):
-        with vsc.implies((self.TestRandNibble == 0xC)):
-            self.TestRandInt in vsc.rangelist(vsc.rng(10, 30))
-
-    @vsc.constraint
-    def cr25_negated_inside(self):
-        vsc.not_inside(self.TestRandNibble, vsc.rangelist(0x0, 0x1, 0x2))
-
-    @vsc.constraint
-    def cr26_randc_test(self):
-        self.TestRandcNibble in vsc.rangelist(vsc.rng(0, 10))
+        vsc.dist(self.yuv_bit_depth, [
+            vsc.weight(BIT_8, 60),
+            vsc.weight(BIT_10, 30),
+            vsc.weight(BIT_12, 10),
+        ])
+        vsc.dist(self.color_space, [
+            vsc.weight(CS_BT601, 40),
+            vsc.weight(CS_BT709, 40),
+            vsc.weight(CS_BT2020, 20),
+        ])
 
 # =============================================================================
 # USAGE EXAMPLE
@@ -290,20 +204,20 @@ if __name__ == '__main__':
     # Set seed for reproducibility (optional)
     # vsc.set_randstate(12345)
 
-    # Create and randomize IspRandItemSmall
-    isp_rand_item_small = IspRandItemSmall()
-    isp_rand_item_small_randomized = False
+    # Create and randomize IspYuv2rgbCfg
+    isp_yuv2rgb_cfg = IspYuv2rgbCfg()
+    isp_yuv2rgb_cfg_randomized = False
     try:
-        isp_rand_item_small.randomize()
-        isp_rand_item_small_randomized = True
-        print(f'IspRandItemSmall randomized successfully')
+        isp_yuv2rgb_cfg.randomize()
+        isp_yuv2rgb_cfg_randomized = True
+        print(f'IspYuv2rgbCfg randomized successfully')
     except Exception as e:
-        print(f'IspRandItemSmall randomize failed: {e}')
+        print(f'IspYuv2rgbCfg randomize failed: {e}')
 
-    if isp_rand_item_small_randomized:
+    if isp_yuv2rgb_cfg_randomized:
         # Print field values
-        print(f'  TestRandInt = {isp_rand_item_small.TestRandInt}')
-        print(f'  TestRandNibble = {isp_rand_item_small.TestRandNibble}')
-        print(f'  TestEnum = {isp_rand_item_small.TestEnum}')
-        print(f'  TestFixedArr = {isp_rand_item_small.TestFixedArr}')
-        print(f'  TestDynArr = {isp_rand_item_small.TestDynArr}')
+        print(f'  enable = {isp_yuv2rgb_cfg.enable}')
+        print(f'  yuv_format = {isp_yuv2rgb_cfg.yuv_format}')
+        print(f'  yuv_packing = {isp_yuv2rgb_cfg.yuv_packing}')
+        print(f'  color_space = {isp_yuv2rgb_cfg.color_space}')
+        print(f'  range_mode = {isp_yuv2rgb_cfg.range_mode}')
