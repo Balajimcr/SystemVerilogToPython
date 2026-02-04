@@ -63,6 +63,7 @@ class IspRandItemSmall(UvmSequenceItem):
         self.isp_grid_2d_0_3 = vsc.rand_int_t(32)
         self.isp_grid_2d_0_4 = vsc.rand_int_t(32)
         self.isp_grid_2d_0_6 = vsc.rand_int_t(32)
+        self.TestRandcNibble = vsc.randc_bit_t(4)
 
     @vsc.constraint
     def parameter_range(self):
@@ -219,6 +220,67 @@ class IspRandItemSmall(UvmSequenceItem):
     @vsc.constraint
     def cr12_bit_slice(self):
         self.IsIspSrcCompType[15:0] == self.IsIspDstCompType[15:0]
+
+    @vsc.constraint
+    def cr15_logical_and(self):
+        (self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 1)
+
+    @vsc.constraint
+    def cr16_logical_or(self):
+        (self.IsIspSrcCompType == 0) | (self.IsIspSrcCompType == 1)
+
+    @vsc.constraint
+    def cr17_logical_not(self):
+        ~(self.IsIspBypassMode == 0)
+
+    @vsc.constraint
+    def cr18_complex_logical(self):
+        ~((self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0))
+
+    @vsc.constraint
+    def cr19_complex_logical_or(self):
+        ~((self.IsIspSrcCompType == 2) | (self.IsIspDstCompType == 2))
+
+    @vsc.constraint
+    def cr20_mixed_logical(self):
+        ((self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0)) | (self.IsIspSrcCompType == 2)
+
+    @vsc.constraint
+    def cr21_begin_end_block(self):
+        vsc.solve_order(self.TestRandInt, self.TestRandNibble)
+        vsc.solve_order(self.TestRandInt, self.TestEnum)
+        with vsc.if_then(self.TestRandInt == 15):
+            self.TestRandNibble == 0xB
+            self.TestEnum == TestEnum.TEST_ENUM_1
+
+    @vsc.constraint
+    def cr22_begin_end_else(self):
+        vsc.solve_order(self.IsIspBypassMode, self.IsIspYuvFormat)
+        vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
+        with vsc.if_then(self.IsIspBypassMode == 1):
+            self.IsIspYuvFormat == 0
+            self.IsIspSrcCompType == 1
+        with vsc.else_then:
+            self.IsIspYuvFormat == 1
+            self.IsIspSrcCompType == 0
+
+    @vsc.constraint
+    def cr23_foreach_inside(self):
+        with vsc.foreach(self.TestFixedArr, idx=True) as j:
+            self.TestFixedArr[j] in vsc.rangelist(vsc.rng(0, 100))
+
+    @vsc.constraint
+    def cr24_impl_inside(self):
+        with vsc.implies((self.TestRandNibble == 0xC)):
+            self.TestRandInt in vsc.rangelist(vsc.rng(10, 30))
+
+    @vsc.constraint
+    def cr25_negated_inside(self):
+        vsc.not_inside(self.TestRandNibble, vsc.rangelist(0x0, 0x1, 0x2))
+
+    @vsc.constraint
+    def cr26_randc_test(self):
+        self.TestRandcNibble in vsc.rangelist(vsc.rng(0, 10))
 
 # =============================================================================
 # USAGE EXAMPLE

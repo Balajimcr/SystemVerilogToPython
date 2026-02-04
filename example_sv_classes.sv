@@ -330,4 +330,98 @@ class Isp_rand_item_small extends uvm_sequence_item;
         (isp_grid_2d_0_1 >= -8388607 && isp_grid_2d_0_1 <= 8388607);
     }
 
+    // --------------------------------------------------------
+    // Test logical operator conversions: && -> &, || -> |, ! -> ~
+    // --------------------------------------------------------
+
+    constraint cr15_logical_and {
+        // && should convert to &
+        (IsIspBypassMode == 1) && (IsIspYuvFormat == 1);
+    }
+
+    constraint cr16_logical_or {
+        // || should convert to |
+        (IsIspSrcCompType == 0) || (IsIspSrcCompType == 1);
+    }
+
+    constraint cr17_logical_not {
+        // ! should convert to ~
+        !(IsIspBypassMode == 0);
+    }
+
+    constraint cr18_complex_logical {
+        // Complex: !(a && b) -> ~(a & b)
+        !((IsIspBypassMode == 1) && (IsIspYuvFormat == 0));
+    }
+
+    constraint cr19_complex_logical_or {
+        // Complex: !(a || b) -> ~(a | b)
+        !((IsIspSrcCompType == 2) || (IsIspDstCompType == 2));
+    }
+
+    constraint cr20_mixed_logical {
+        // Mixed operators
+        ((IsIspBypassMode == 1) && (IsIspYuvFormat == 0)) || (IsIspSrcCompType == 2);
+    }
+
+    // --------------------------------------------------------
+    // Test begin...end block handling
+    // --------------------------------------------------------
+
+    constraint cr21_begin_end_block {
+        if (TestRandInt == 15) begin
+            TestRandNibble == 4'hB;
+            TestEnum == TEST_ENUM_1;
+        end
+        solve TestRandInt before TestRandNibble;
+        solve TestRandInt before TestEnum;
+    }
+
+    constraint cr22_begin_end_else {
+        if (IsIspBypassMode == 1) begin
+            IsIspYuvFormat == 0;
+            IsIspSrcCompType == 1;
+        end else begin
+            IsIspYuvFormat == 1;
+            IsIspSrcCompType == 0;
+        end
+        solve IsIspBypassMode before IsIspYuvFormat;
+        solve IsIspBypassMode before IsIspSrcCompType;
+    }
+
+    // --------------------------------------------------------
+    // Test foreach with inside
+    // --------------------------------------------------------
+
+    constraint cr23_foreach_inside {
+        foreach (TestFixedArr[j]) {
+            TestFixedArr[j] inside {[0:100]};
+        }
+    }
+
+    // --------------------------------------------------------
+    // Test implication with inside
+    // --------------------------------------------------------
+
+    constraint cr24_impl_inside {
+        (TestRandNibble == 4'hC) -> (TestRandInt inside {[10:30]});
+    }
+
+    // --------------------------------------------------------
+    // Test negated inside
+    // --------------------------------------------------------
+
+    constraint cr25_negated_inside {
+        !(TestRandNibble inside {4'h0, 4'h1, 4'h2});
+    }
+
+    // --------------------------------------------------------
+    // Test randc field
+    // --------------------------------------------------------
+    randc bit [3:0] TestRandcNibble;
+
+    constraint cr26_randc_test {
+        TestRandcNibble inside {[0:10]};
+    }
+
 endclass

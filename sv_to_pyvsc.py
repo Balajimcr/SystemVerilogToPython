@@ -2047,11 +2047,36 @@ from typing import Optional'''
             return ""
 
         expr = self._convert_numbers(expr)
+        expr = self._convert_logical_operators(expr)
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
         expr = self._qualify_enum_values(expr)
         expr = self._add_self_prefix(expr)
         expr = self._convert_bare_conditions(expr)
+        return expr
+
+    def _convert_logical_operators(self, expr: str) -> str:
+        """Convert SystemVerilog logical operators to PyVSC equivalents.
+
+        Conversions:
+        - && -> &
+        - || -> |
+        - !expr -> ~expr
+        - !(a && b) -> ~(a & b)
+        - !(a || b) -> ~(a | b)
+        """
+        # First convert && to & and || to |
+        expr = re.sub(r'&&', '&', expr)
+        expr = re.sub(r'\|\|', '|', expr)
+
+        # Convert ! to ~ for logical NOT
+        # Handle !( patterns first (negation of grouped expressions)
+        expr = re.sub(r'!\s*\(', '~(', expr)
+
+        # Handle !var patterns (negation of single variables)
+        # But don't convert != (not equal)
+        expr = re.sub(r'!(?!=)(\w)', r'~\1', expr)
+
         return expr
 
     def _qualify_enum_values(self, expr: str) -> str:
@@ -2072,10 +2097,10 @@ from typing import Optional'''
 
     def _convert_bare_conditions(self, expr: str) -> str:
         """Convert bare variable conditions to PyVSC-compatible comparisons.
-        
+
         PyVSC doesn't support True/False or bare variables in conditions.
         Convert: self.var -> (self.var != 0)
-        Convert: not self.var -> (self.var == 0)
+        Convert: ~self.var -> (self.var == 0)
         """
         # Don't convert if it already has a comparison operator
         if any(op in expr for op in ['==', '!=', '<', '>', '<=', '>=']):
@@ -2088,54 +2113,17 @@ from typing import Optional'''
         # Handle 'in vsc.rangelist' - this is already a valid constraint
         if ' in vsc.rangelist' in expr:
             return expr
-        
-        # Handle 'not self.var' -> '(self.var == 0)'
-        not_match = re.match(r'^not\s+(self\.\w+)$', expr.strip())
+
+        # Handle '~self.var' -> '(self.var == 0)'
+        not_match = re.match(r'^~\s*(self\.\w+)$', expr.strip())
         if not_match:
             return f'({not_match.group(1)} == 0)'
-        
+
         # Handle bare 'self.var' -> '(self.var != 0)'
         bare_var_match = re.match(r'^(self\.\w+)$', expr.strip())
         if bare_var_match:
             return f'({bare_var_match.group(1)} != 0)'
-        
-        # Handle logical expressions with bare variables
-        # e.g., "self.a and self.b" -> "(self.a != 0) and (self.b != 0)"
-        if ' and ' in expr or ' or ' in expr:
-            def convert_term(term):
-                term = term.strip()
-                # Skip if already has comparison
-                if any(op in term for op in ['==', '!=', '<', '>', '<=', '>=']):
-                    return term
-                # Skip vsc constructs
-                if 'vsc.' in term:
-                    return term
-                # Handle 'not self.var'
-                not_m = re.match(r'^not\s+(self\.\w+)$', term)
-                if not_m:
-                    return f'({not_m.group(1)} == 0)'
-                # Handle bare 'self.var'
-                bare_m = re.match(r'^(self\.\w+)$', term)
-                if bare_m:
-                    return f'({bare_m.group(1)} != 0)'
-                # Handle parenthesized expressions
-                if term.startswith('(') and term.endswith(')'):
-                    inner = term[1:-1]
-                    converted = convert_term(inner)
-                    if converted != inner:
-                        return f'({converted})'
-                return term
-            
-            # Split on 'and' and 'or' while preserving them
-            parts = re.split(r'(\s+and\s+|\s+or\s+)', expr)
-            converted_parts = []
-            for part in parts:
-                if part.strip() in ['and', 'or'] or re.match(r'^\s+(and|or)\s+$', part):
-                    converted_parts.append(part)
-                else:
-                    converted_parts.append(convert_term(part))
-            return ''.join(converted_parts)
-        
+
         return expr
 
     def _convert_inside_expression(self, expr: str) -> str:
