@@ -126,7 +126,9 @@ PYTHON_KEYWORDS = frozenset({
     'True', 'False', 'None', 'pass', 'break', 'continue', 'return',
     # SV keywords that should not get self. prefix
     'inside', 'dist', 'solve', 'before', 'soft', 'unique', 'foreach',
-    'vsc', 'self', 'with', 'as'
+    'vsc', 'self', 'with', 'as',
+    # SV block keywords
+    'begin', 'end'
 })
 
 # Constraint analysis patterns
@@ -321,8 +323,9 @@ class SVParser:
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
             return False
         # Must not be a reserved word or look like garbage
-        invalid_names = {'format', 'before', 'inside', 'solve', 'if', 'else', 
-                        'constraint', 'function', 'endfunction', 'return', 'this'}
+        invalid_names = {'format', 'before', 'inside', 'solve', 'if', 'else',
+                        'constraint', 'function', 'endfunction', 'return', 'this',
+                        'begin', 'end'}
         if name in invalid_names:
             return False
         # Must not start with underscore (often indicates internal/garbage)
@@ -1271,20 +1274,44 @@ from typing import Optional'''
         current = ""
         brace_depth = 0
         paren_depth = 0
+        begin_depth = 0
         i = 0
-        
+
         while i < len(body):
             char = body[i]
-            
+
+            # Check for 'begin' keyword
+            if body[i:i+5] == 'begin' and (i == 0 or not body[i-1].isalnum()):
+                if i + 5 >= len(body) or not body[i+5].isalnum():
+                    begin_depth += 1
+                    current += body[i:i+5]
+                    i += 5
+                    continue
+
+            # Check for 'end' keyword (but not endclass, endfunction, etc.)
+            if body[i:i+3] == 'end' and (i == 0 or not body[i-1].isalnum()):
+                if i + 3 >= len(body) or not body[i+3].isalnum():
+                    begin_depth -= 1
+                    current += body[i:i+3]
+                    i += 3
+                    # If we closed the outermost begin/end, check for else
+                    if begin_depth == 0 and brace_depth == 0 and paren_depth == 0:
+                        remaining = body[i:].lstrip()
+                        if not remaining.startswith('else'):
+                            if current.strip():
+                                statements.append(current.strip())
+                            current = ""
+                    continue
+
             if char == '{':
                 brace_depth += 1
                 current += char
             elif char == '}':
                 brace_depth -= 1
                 current += char
-                
+
                 # If we just closed the outermost brace, this might be end of a block statement
-                if brace_depth == 0 and paren_depth == 0:
+                if brace_depth == 0 and paren_depth == 0 and begin_depth == 0:
                     # Check if this is an if/else block by looking for else after
                     # Skip whitespace and semicolons to find else
                     remaining = body[i+1:].lstrip()
@@ -1301,7 +1328,7 @@ from typing import Optional'''
             elif char == ')':
                 paren_depth -= 1
                 current += char
-            elif char == ';' and brace_depth == 0 and paren_depth == 0:
+            elif char == ';' and brace_depth == 0 and paren_depth == 0 and begin_depth == 0:
                 # Check if next non-whitespace is else or else if
                 remaining = body[i+1:].lstrip()
                 if remaining.startswith('else'):
@@ -1315,13 +1342,13 @@ from typing import Optional'''
                     current = ""
             else:
                 current += char
-            
+
             i += 1
-        
+
         # Don't forget any remaining content
         if current.strip():
             statements.append(current.strip())
-        
+
         return statements
 
     def _translate_statement(self, stmt: str) -> List[str]:
@@ -1558,23 +1585,41 @@ from typing import Optional'''
         
         return lines
 
+    def _find_matching_begin_end(self, text: str, start: int) -> int:
+        """Find matching 'end' for 'begin' at position start."""
+        depth = 1
+        i = start + 5  # Skip past 'begin'
+        while i < len(text) and depth > 0:
+            # Check for 'begin' keyword
+            if text[i:i+5] == 'begin' and (i == 0 or not text[i-1].isalnum()):
+                if i + 5 >= len(text) or not text[i+5].isalnum():
+                    depth += 1
+            # Check for 'end' keyword (but not 'endclass', 'endfunction', etc.)
+            elif text[i:i+3] == 'end' and (i == 0 or not text[i-1].isalnum()):
+                if i + 3 >= len(text) or not text[i+3].isalnum():
+                    depth -= 1
+                    if depth == 0:
+                        return i + 2  # Return position of last char of 'end'
+            i += 1
+        return -1
+
     def _parse_if_block(self, stmt: str) -> Optional[Tuple[str, str, str]]:
-        """Parse if block - handles both braced and inline forms."""
+        """Parse if block - handles braced, begin/end, and inline forms."""
         stmt = stmt.strip()
         match = re.match(r'if\s*\(', stmt)
         if not match:
             return None
-        
+
         # Find condition (matching parentheses)
         cond_start = match.end() - 1
         cond_end = self._find_matching_paren(stmt, cond_start)
         if cond_end == -1:
             return None
-        
+
         condition = stmt[cond_start + 1:cond_end].strip()
         after_cond = stmt[cond_end + 1:].strip()
-        
-        # Check for braced body or inline statement
+
+        # Check for braced body
         if after_cond.startswith('{'):
             # Braced body
             body_end = self._find_matching_brace(stmt, cond_end + 1 + (len(stmt[cond_end+1:]) - len(after_cond)))
@@ -1583,6 +1628,14 @@ from typing import Optional'''
             brace_pos = stmt.index('{', cond_end)
             body = stmt[brace_pos + 1:body_end].strip()
             remainder = stmt[body_end + 1:].strip()
+        # Check for begin...end body
+        elif after_cond.startswith('begin'):
+            begin_pos = stmt.index('begin', cond_end)
+            end_pos = self._find_matching_begin_end(stmt, begin_pos)
+            if end_pos == -1:
+                return None
+            body = stmt[begin_pos + 5:end_pos - 2].strip()  # Skip 'begin' and 'end'
+            remainder = stmt[end_pos + 1:].strip()
         else:
             # Inline statement (no braces) - find the semicolon or next else
             body, remainder = self._extract_inline_statement(after_cond)
@@ -1598,17 +1651,17 @@ from typing import Optional'''
             match = re.match(r'else\s*if\s*\(', stmt)
             if not match:
                 return None
-        
+
         # Find condition
         cond_start = stmt.index('(')
         cond_end = self._find_matching_paren(stmt, cond_start)
         if cond_end == -1:
             return None
-        
+
         condition = stmt[cond_start + 1:cond_end].strip()
         after_cond = stmt[cond_end + 1:].strip()
-        
-        # Check for braced body or inline statement
+
+        # Check for braced body
         if after_cond.startswith('{'):
             brace_pos = stmt.index('{', cond_end)
             body_end = self._find_matching_brace(stmt, brace_pos)
@@ -1616,9 +1669,17 @@ from typing import Optional'''
                 return None
             body = stmt[brace_pos + 1:body_end].strip()
             remainder = stmt[body_end + 1:].strip()
+        # Check for begin...end body
+        elif after_cond.startswith('begin'):
+            begin_pos = stmt.index('begin', cond_end)
+            end_pos = self._find_matching_begin_end(stmt, begin_pos)
+            if end_pos == -1:
+                return None
+            body = stmt[begin_pos + 5:end_pos - 2].strip()
+            remainder = stmt[end_pos + 1:].strip()
         else:
             body, remainder = self._extract_inline_statement(after_cond)
-        
+
         return condition, body, remainder
 
     def _parse_else_block(self, stmt: str) -> Optional[Tuple[str, str]]:
@@ -1627,9 +1688,9 @@ from typing import Optional'''
         match = re.match(r'else\s*(?!\s*if)', stmt)
         if not match:
             return None
-        
+
         after_else = stmt[match.end():].strip()
-        
+
         if after_else.startswith('{'):
             brace_pos = stmt.index('{')
             body_end = self._find_matching_brace(stmt, brace_pos)
@@ -1637,9 +1698,17 @@ from typing import Optional'''
                 return None
             body = stmt[brace_pos + 1:body_end].strip()
             remainder = stmt[body_end + 1:].strip()
+        # Check for begin...end body
+        elif after_else.startswith('begin'):
+            begin_pos = stmt.index('begin')
+            end_pos = self._find_matching_begin_end(stmt, begin_pos)
+            if end_pos == -1:
+                return None
+            body = stmt[begin_pos + 5:end_pos - 2].strip()
+            remainder = stmt[end_pos + 1:].strip()
         else:
             body, remainder = self._extract_inline_statement(after_else)
-        
+
         return body, remainder
 
     def _extract_inline_statement(self, stmt: str) -> Tuple[str, str]:

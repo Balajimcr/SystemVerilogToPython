@@ -106,10 +106,9 @@ class Isp_rand_item_small extends uvm_sequence_item;
     // multiple solve – fan-out
     // --------------------------------------------------------
     constraint CR_TEST_MULTI_SOLVE_FANOUT {
-        if (TestRandInt == 20) begin
+        if (TestRandInt == 20)
             TestRandNibble == 4'hA;
-            TestEnum == TEST_ENUM_2;
-        end
+            TestEnum == TEST_ENUM_2;        
 
         solve TestRandInt before TestRandNibble;
         solve TestRandInt before TestEnum;

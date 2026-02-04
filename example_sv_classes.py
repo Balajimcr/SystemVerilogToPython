@@ -106,14 +106,11 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def CR_TEST_MULTI_SOLVE_FANOUT(self):
+        vsc.solve_order(self.TestRandInt, self.TestRandNibble)
         vsc.solve_order(self.TestRandInt, self.TestEnum)
         with vsc.if_then(self.TestRandInt == 20):
-            self.begin
             self.TestRandNibble == 0xA
         self.TestEnum == self.TEST_ENUM_2
-        self.end
-
-        solve self.TestRandInt before self.TestRandNibble
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
