@@ -1998,7 +1998,6 @@ from typing import Optional'''
             return ""
 
         expr = self._convert_numbers(expr)
-        expr = self._convert_logical_operators(expr)
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
         expr = self._qualify_enum_values(expr)
@@ -2102,17 +2101,6 @@ from typing import Optional'''
             return f'{var_name}.inside(vsc.rangelist({rangelist}))'
 
         return re.sub(pattern, replace_inside, expr)
-
-    @staticmethod
-    def _convert_logical_operators(expr: str) -> str:
-        """Convert SV logical operators to Python equivalents."""
-        # Replace && with 'and' and || with 'or'
-        expr = re.sub(r'\s*&&\s*', ' and ', expr)
-        expr = re.sub(r'\s*\|\|\s*', ' or ', expr)
-        # Keep single & and | as-is (PyVSC supports them directly)
-        # Replace logical NOT (!) but not !=
-        expr = re.sub(r'!\s*(?!=)', 'not ', expr)
-        return expr
 
     def _add_self_prefix(self, expr: str) -> str:
         """Add self. prefix to variable names."""
