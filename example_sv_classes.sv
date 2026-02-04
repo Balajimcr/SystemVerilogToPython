@@ -39,14 +39,14 @@ class Isp_rand_item_small extends uvm_sequence_item;
     // --------------------------------------------------------
     constraint CR_TEST_INSIDE_FORMS {
         TestRandInt inside {[5:15]};
-        TestRandcNibble inside {4'h0, 4'hF, 4'hA};
+        TestRandNibble inside {4'h0, 4'hF, 4'hA};
     }
 
     // --------------------------------------------------------
     // implication (A -> B)
     // --------------------------------------------------------
     constraint CR_TEST_IMPLICATION {
-        (TestRandcNibble == 4'hF) -> (TestRandInt == 42);
+        (TestRandNibble == 4'hF) -> (TestRandInt == 42);
     }
 
     // --------------------------------------------------------
@@ -99,7 +99,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
             TestRandInt == 15;
 
         solve TestEnum        before TestRandInt;
-        solve TestRandcNibble before TestRandInt;
+        solve TestRandNibble before TestRandInt;
     }
 
     // --------------------------------------------------------
@@ -107,11 +107,11 @@ class Isp_rand_item_small extends uvm_sequence_item;
     // --------------------------------------------------------
     constraint CR_TEST_MULTI_SOLVE_FANOUT {
         if (TestRandInt == 20) begin
-            TestRandcNibble == 4'hA;
+            TestRandNibble == 4'hA;
             TestEnum == TEST_ENUM_2;
         end
 
-        solve TestRandInt before TestRandcNibble;
+        solve TestRandInt before TestRandNibble;
         solve TestRandInt before TestEnum;
     }
 

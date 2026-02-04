@@ -65,11 +65,11 @@ class IspRandItemSmall(UvmSequenceItem):
     @vsc.constraint
     def CR_TEST_INSIDE_FORMS(self):
         self.TestRandInt.inside(vsc.rangelist(vsc.rng(5, 15)))
-        self.TestRandcNibble.inside(vsc.rangelist(0x0, 0xF, 0xA))
+        self.TestRandNibble.inside(vsc.rangelist(0x0, 0xF, 0xA))
 
     @vsc.constraint
     def CR_TEST_IMPLICATION(self):
-        vsc.implies((self.TestRandcNibble == 0xF), (self.TestRandInt == 42))
+        vsc.implies((self.TestRandNibble == 0xF), (self.TestRandInt == 42))
 
     @vsc.constraint
     def CR_TEST_FOREACH(self):
@@ -100,7 +100,7 @@ class IspRandItemSmall(UvmSequenceItem):
     @vsc.constraint
     def CR_TEST_MULTI_SOLVE_FANIN(self):
         vsc.solve_order(self.TestEnum, self.TestRandInt)
-        vsc.solve_order(self.TestRandcNibble, self.TestRandInt)
+        vsc.solve_order(self.TestRandNibble, self.TestRandInt)
         with vsc.if_then(self.TestEnum == self.TEST_ENUM_1):
             self.TestRandInt == 15
 
@@ -109,11 +109,11 @@ class IspRandItemSmall(UvmSequenceItem):
         vsc.solve_order(self.TestRandInt, self.TestEnum)
         with vsc.if_then(self.TestRandInt == 20):
             self.begin
-            self.TestRandcNibble == 0xA
+            self.TestRandNibble == 0xA
         self.TestEnum == self.TEST_ENUM_2
         self.end
 
-        solve self.TestRandInt before self.TestRandcNibble
+        solve self.TestRandInt before self.TestRandNibble
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
