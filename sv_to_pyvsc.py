@@ -231,18 +231,19 @@ class SVParser:
         fields = []
         patterns = [
             # rand/randc bit/logic [signed] [N:0] name [array]
-            r'(rand|randc)?\s*(bit|logic)\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
+            r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*$',
             # rand/randc int/byte/shortint/longint [signed|unsigned] name
-            r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(signed|unsigned))?\s+(\w+)\s*;',
+            r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b(?:\s+(signed|unsigned))?\s+(\w+)\s*$',
             # rand/randc enum_type name
-            r'(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*;',
+            r'^\s*(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*$',
         ]
 
         # Remove constraint blocks, function blocks from class body before parsing fields
         cleaned_body = self._remove_blocks_for_field_extraction(class_body)
 
         for line in cleaned_body.split(';'):
-            line = line.strip()
+            # Remove line comments before any checks/matching
+            line = re.sub(r'//.*', '', line).strip()
             if not line:
                 continue
             
@@ -258,7 +259,7 @@ class SVParser:
                 continue
 
             # Handle comma-separated field declarations: rand bit [signed] [7:0] a, b, c;
-            comma_match = re.match(r'(rand|randc)?\s*(bit|logic)\s*(signed)?\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)', line)
+            comma_match = re.match(r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)\s*$', line)
             if comma_match:
                 rand_type, data_type, signed_str, width_str, names_str = comma_match.groups()
                 width = int(width_str) + 1 if width_str else 1
@@ -277,7 +278,7 @@ class SVParser:
                 continue
 
             # Handle comma-separated int declarations: rand int signed a, b, c;
-            int_comma_match = re.match(r'(rand|randc)?\s*(int|byte|shortint|longint)\s*(signed|unsigned)?\s+(\w+(?:\s*,\s*\w+)+)', line)
+            int_comma_match = re.match(r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b\s*(signed|unsigned)?\s+(\w+(?:\s*,\s*\w+)+)\s*$', line)
             if int_comma_match:
                 rand_type, data_type, sign_spec, names_str = int_comma_match.groups()
                 width = WIDTH_MAP[data_type]
@@ -297,7 +298,7 @@ class SVParser:
 
             # Try each standard pattern
             for pattern in patterns:
-                match = re.search(pattern, line + ';')
+                match = re.match(pattern, line)
                 if match:
                     parsed = self._parse_field_match(match.groups(), line + ';')
                     if parsed and self._is_valid_field_name(parsed.name):
