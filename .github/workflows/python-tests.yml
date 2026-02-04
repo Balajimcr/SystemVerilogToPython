@@ -43,7 +43,38 @@ jobs:
         python -m py_compile example_sv_classes.py
         echo "Generated code syntax OK"
 
-    # Runtime execution can fail for some generated constructs; keep CI focused on translation + syntax.
+    - name: Verify PyVSC imports and class definitions
+      run: |
+        python -c "
+import sys
+try:
+    # Import the generated module to verify PyVSC compatibility
+    import vsc
+    exec(open('example_sv_classes.py').read())
+    print('PyVSC imports and class definitions OK')
+except Exception as e:
+    print(f'PyVSC verification failed: {e}')
+    sys.exit(1)
+"
+
+    - name: Test PyVSC randomization (optional)
+      continue-on-error: true
+      run: |
+        python -c "
+import vsc
+exec(open('example_sv_classes.py').read())
+
+# Try to instantiate and randomize the main class
+try:
+    obj = IspRandItemSmall()
+    obj.randomize()
+    print('Randomization test PASSED')
+    print(f'  TestRandInt = {obj.TestRandInt}')
+    print(f'  TestRandNibble = {obj.TestRandNibble}')
+    print(f'  TestEnum = {obj.TestEnum}')
+except Exception as e:
+    print(f'Randomization test failed (non-blocking): {e}')
+"
 
   lint:
     runs-on: ubuntu-latest
