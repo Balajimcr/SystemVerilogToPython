@@ -154,9 +154,9 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def cr9_single_logical_ops(self):
-        (self.IsIspBypassMode == 1) and (self.IsIspYuvFormat == 0)
-        (self.IsIspSrcCompType == 0) or (self.IsIspDstCompType == 1)
-        (self.IsIspInBittageType >= 0) and (self.IsIspInBittageType <= 2) or (self.IsIspOutBittageType == 3)
+        (self.IsIspBypassMode == 1) & (self.IsIspYuvFormat == 0)
+        (self.IsIspSrcCompType == 0) | (self.IsIspDstCompType == 1)
+        (self.IsIspInBittageType >= 0) & (self.IsIspInBittageType <= 2) | (self.IsIspOutBittageType == 3)
 
     @vsc.constraint
     def cr10_bit_slice(self):
