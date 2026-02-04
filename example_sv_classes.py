@@ -38,6 +38,11 @@ class IspRandItemSmall(UvmSequenceItem):
 
     def __init__(self):
         super().__init__()
+        self.TestRandInt = vsc.rand_int32_t()
+        self.TestRandcNibble = vsc.randc_bit_t(4)
+        self.TestEnum = vsc.rand_enum_t(TestEnum)
+        self.TestFixedArr = vsc.rand_list_t(vsc.bit_t(8), sz=4)
+        self.TestDynArr = vsc.rand_list_t(vsc.bit_t(16))
         self.IsIspBypassMode = vsc.rand_bit_t(32)
         self.IsIspYuvFormat = vsc.rand_bit_t(32)
         self.IsIspSrcCompType = vsc.rand_bit_t(32)
@@ -52,6 +57,63 @@ class IspRandItemSmall(UvmSequenceItem):
         self.isp_grid_2d_0_3 = vsc.rand_int32_t()
         self.isp_grid_2d_0_4 = vsc.rand_int32_t()
         self.isp_grid_2d_0_6 = vsc.rand_int32_t()
+
+    @vsc.constraint
+    def CR_TEST_RAND_INT_RANGE(self):
+        self.TestRandInt in vsc.rangelist(vsc.rng(10, 20))
+
+    @vsc.constraint
+    def CR_TEST_INSIDE_FORMS(self):
+        self.TestRandInt.inside(vsc.rangelist(vsc.rng(5, 15)))
+        self.TestRandcNibble.inside(vsc.rangelist(0x0, 0xF, 0xA))
+
+    @vsc.constraint
+    def CR_TEST_IMPLICATION(self):
+        vsc.implies((self.TestRandcNibble == 0xF), (self.TestRandInt == 42))
+
+    @vsc.constraint
+    def CR_TEST_FOREACH(self):
+        with vsc.foreach(self.TestFixedArr, idx=True) as i:
+            self.TestFixedArr[i] >= i
+            self.TestFixedArr[i] <= 0xFF
+
+    @vsc.constraint
+    def CR_TEST_UNIQUE(self):
+        vsc.unique(self.TestFixedArr)
+
+    @vsc.constraint
+    def CR_TEST_DYN_ARRAY(self):
+        self.TestDynArr.size.inside(vsc.rangelist(vsc.rng(1, 8)))
+
+    @vsc.constraint
+    def CR_TEST_SOFT(self):
+        vsc.soft(self.TestRandInt == 12)
+
+    @vsc.constraint
+    def CR_TEST_DIST(self):
+        vsc.dist(self.TestRandInt, [
+            vsc.weight(10, 10),
+            vsc.weight(15, 30),
+            vsc.weight(20, 60),
+        ])
+
+    @vsc.constraint
+    def CR_TEST_MULTI_SOLVE_FANIN(self):
+        vsc.solve_order(self.TestEnum, self.TestRandInt)
+        vsc.solve_order(self.TestRandcNibble, self.TestRandInt)
+        with vsc.if_then(self.TestEnum == self.TEST_ENUM_1):
+            self.TestRandInt == 15
+
+    @vsc.constraint
+    def CR_TEST_MULTI_SOLVE_FANOUT(self):
+        vsc.solve_order(self.TestRandInt, self.TestEnum)
+        with vsc.if_then(self.TestRandInt == 20):
+            self.begin
+            self.TestRandcNibble == 0xA
+        self.TestEnum == self.TEST_ENUM_2
+        self.end
+
+        solve self.TestRandInt before self.TestRandcNibble
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
@@ -192,8 +254,8 @@ if __name__ == '__main__':
     print(f'IspRandItemSmall randomized successfully')
 
     # Print field values
-    print(f'  IsIspBypassMode = {isp_rand_item_small.IsIspBypassMode}')
-    print(f'  IsIspYuvFormat = {isp_rand_item_small.IsIspYuvFormat}')
-    print(f'  IsIspSrcCompType = {isp_rand_item_small.IsIspSrcCompType}')
-    print(f'  IsIspDstCompType = {isp_rand_item_small.IsIspDstCompType}')
-    print(f'  IsIspInBittageType = {isp_rand_item_small.IsIspInBittageType}')
+    print(f'  TestRandInt = {isp_rand_item_small.TestRandInt}')
+    print(f'  TestRandcNibble = {isp_rand_item_small.TestRandcNibble}')
+    print(f'  TestEnum = {isp_rand_item_small.TestEnum}')
+    print(f'  TestFixedArr = {isp_rand_item_small.TestFixedArr}')
+    print(f'  TestDynArr = {isp_rand_item_small.TestDynArr}')

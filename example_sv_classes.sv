@@ -4,6 +4,122 @@
 
 class Isp_rand_item_small extends uvm_sequence_item;
 
+    // ========================================================
+    // ADDITIONAL TRANSLATION-COVERAGE FIELDS (ADDED ON TOP)
+    // ========================================================
+
+    // rand int
+    rand int TestRandInt;
+
+    // randc bit
+    randc bit [3:0] TestRandcNibble;
+
+    // rand enum
+    typedef enum int {TEST_ENUM_0, TEST_ENUM_1, TEST_ENUM_2} test_enum_t;
+    rand test_enum_t TestEnum;
+
+    // fixed-size array
+    rand bit [7:0] TestFixedArr [4];
+
+    // dynamic array
+    rand bit [15:0] TestDynArr [];
+
+    // ========================================================
+    // ADDITIONAL TRANSLATION-COVERAGE CONSTRAINTS (ADDED ON TOP)
+    // ========================================================
+
+    // --------------------------------------------------------
+    // rand int range (>= && <=)
+    // --------------------------------------------------------
+    constraint CR_TEST_RAND_INT_RANGE {
+        TestRandInt >= 10 && TestRandInt <= 20;
+    }
+
+    // --------------------------------------------------------
+    // inside {[a:b]} and inside {v1,v2}
+    // --------------------------------------------------------
+    constraint CR_TEST_INSIDE_FORMS {
+        TestRandInt inside {[5:15]};
+        TestRandcNibble inside {4'h0, 4'hF, 4'hA};
+    }
+
+    // --------------------------------------------------------
+    // implication (A -> B)
+    // --------------------------------------------------------
+    constraint CR_TEST_IMPLICATION {
+        (TestRandcNibble == 4'hF) -> (TestRandInt == 42);
+    }
+
+    // --------------------------------------------------------
+    // foreach constraint
+    // --------------------------------------------------------
+    constraint CR_TEST_FOREACH {
+        foreach (TestFixedArr[i]) {
+            TestFixedArr[i] >= i;
+            TestFixedArr[i] <= 8'hFF;
+        }
+    }
+
+    // --------------------------------------------------------
+    // unique constraint
+    // --------------------------------------------------------
+    constraint CR_TEST_UNIQUE {
+        unique {TestFixedArr};
+    }
+
+    // --------------------------------------------------------
+    // dynamic array size
+    // --------------------------------------------------------
+    constraint CR_TEST_DYN_ARRAY {
+        TestDynArr.size() inside {[1:8]};
+    }
+
+    // --------------------------------------------------------
+    // soft constraint
+    // --------------------------------------------------------
+    constraint CR_TEST_SOFT {
+        soft TestRandInt == 12;
+    }
+
+    // --------------------------------------------------------
+    // distribution (dist)
+    // --------------------------------------------------------
+    constraint CR_TEST_DIST {
+        TestRandInt dist {
+            10 := 10,
+            15 := 30,
+            20 := 60
+        };
+    }
+
+    // --------------------------------------------------------
+    // multiple solve – fan-in
+    // --------------------------------------------------------
+    constraint CR_TEST_MULTI_SOLVE_FANIN {
+        if (TestEnum == TEST_ENUM_1)
+            TestRandInt == 15;
+
+        solve TestEnum        before TestRandInt;
+        solve TestRandcNibble before TestRandInt;
+    }
+
+    // --------------------------------------------------------
+    // multiple solve – fan-out
+    // --------------------------------------------------------
+    constraint CR_TEST_MULTI_SOLVE_FANOUT {
+        if (TestRandInt == 20) begin
+            TestRandcNibble == 4'hA;
+            TestEnum == TEST_ENUM_2;
+        end
+
+        solve TestRandInt before TestRandcNibble;
+        solve TestRandInt before TestEnum;
+    }
+
+    // ========================================================
+    // ================= ORIGINAL CONTENT (UNCHANGED) ==========
+    // ========================================================
+
     // --------------------------------------------------------
     // Core control fields
     // --------------------------------------------------------
@@ -103,7 +219,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
 
         solve IsIspBypassMode before IsIspDstCompType;
         solve IsIspSrcCompType before IsIspDstCompType;
-		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspYuvFormat before IsIspSrcCompType;
         solve IsIspDstCompType before IsIspInBittageType;
         solve IsIspInBittageType before IsIspOutBittageType;
     }
@@ -121,7 +237,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
             IsIspInBittageType == 3;
 
         solve IsRdmaDataFormatYuv before IsIspInBittageType;
-		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspYuvFormat before IsIspSrcCompType;
         solve IsIspSrcCompType before IsIspDstCompType;
         solve IsIspDstCompType before IsIspInBittageType;
         solve IsIspInBittageType before IsIspOutBittageType;
@@ -141,7 +257,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
 
         solve IsIspInBittageType before IsIspOutBittageType;
         solve IsIspDstCompType before IsIspOutBittageType;
-		solve IsIspYuvFormat before IsIspSrcCompType;
+        solve IsIspYuvFormat before IsIspSrcCompType;
         solve IsIspSrcCompType before IsIspDstCompType;
         solve IsIspDstCompType before IsIspInBittageType;
         solve IsIspInBittageType before IsIspOutBittageType;
@@ -158,7 +274,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
             IsIspYuvFormat == 1;
 
         solve IsRdmaDataFormatYuv before IsWdmaDataFormatYuv;
-		solve IsIspBypassMode before IsIspYuvFormat;
+        solve IsIspBypassMode before IsIspYuvFormat;
         solve IsIspYuvFormat before IsIspSrcCompType;
         solve IsIspSrcCompType before IsIspDstCompType;
         solve IsIspDstCompType before IsIspInBittageType;
@@ -215,4 +331,5 @@ class Isp_rand_item_small extends uvm_sequence_item;
     constraint cr14_paren_range {
         (isp_grid_2d_0_1 >= -8388607 && isp_grid_2d_0_1 <= 8388607);
     }
+
 endclass
