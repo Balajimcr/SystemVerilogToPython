@@ -35,7 +35,7 @@ jobs:
 
     - name: Run translation on example file
       run: |
-        python sv_to_pyvsc.py example_sv_classes.sv -o example_sv_classes.py -q
+        python sv_to_pyvsc.py example_sv_classes.sv -o example_sv_classes.py
         echo "Translation completed"
 
     - name: Verify generated code syntax
