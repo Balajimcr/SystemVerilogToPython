@@ -2364,14 +2364,8 @@ def main():
 
 
     parser.add_argument('-r', '--report', action='store_true', help='Print translation report')
-    parser.add_argument('-q', '--quiet', action='store_true', help='Suppress code output')
 
     args = parser.parse_args()
-
-    # Default behavior: input.sv -o output.py (no stdout)
-    used_default_output = args.output == 'output.py' and '-o' not in sys.argv
-    if used_default_output:
-        args.quiet = True
 
     translator = SVtoPyVSCTranslator(verbose=args.report)
 
@@ -2383,9 +2377,6 @@ def main():
     except Exception as e:
         print(f"Error during translation: {e}", file=sys.stderr)
         sys.exit(1)
-
-    if not args.quiet:
-        print(result.pyvsc_code)
 
     if args.report:
         translator.print_report(result)
