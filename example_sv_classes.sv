@@ -9,7 +9,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
     // ========================================================
 
     // rand int
-    rand int TestRandInt;
+    rand bit signed [31:0] TestRandInt;
 
     // randc bit
     randc bit [3:0] TestRandcNibble;
