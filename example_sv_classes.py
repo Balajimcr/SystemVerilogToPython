@@ -39,7 +39,7 @@ class IspRandItemSmall(UvmSequenceItem):
     def __init__(self):
         super().__init__()
         self.TestRandInt = vsc.rand_int32_t()
-        self.TestRandcNibble = vsc.randc_bit_t(4)
+        self.TestRandNibble = vsc.rand_bit_t(4)
         self.TestEnum = vsc.rand_enum_t(TestEnum)
         self.TestFixedArr = vsc.rand_list_t(vsc.bit_t(8), sz=4)
         self.TestDynArr = vsc.rand_list_t(vsc.bit_t(16))
@@ -255,7 +255,7 @@ if __name__ == '__main__':
 
     # Print field values
     print(f'  TestRandInt = {isp_rand_item_small.TestRandInt}')
-    print(f'  TestRandcNibble = {isp_rand_item_small.TestRandcNibble}')
+    print(f'  TestRandNibble = {isp_rand_item_small.TestRandNibble}')
     print(f'  TestEnum = {isp_rand_item_small.TestEnum}')
     print(f'  TestFixedArr = {isp_rand_item_small.TestFixedArr}')
     print(f'  TestDynArr = {isp_rand_item_small.TestDynArr}')

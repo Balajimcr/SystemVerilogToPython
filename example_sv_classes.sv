@@ -11,8 +11,7 @@ class Isp_rand_item_small extends uvm_sequence_item;
     // rand int
     rand bit signed [31:0] TestRandInt;
 
-    // randc bit
-    randc bit [3:0] TestRandcNibble;
+    rand bit [3:0] TestRandNibble;
 
     // rand enum
     typedef enum int {TEST_ENUM_0, TEST_ENUM_1, TEST_ENUM_2} test_enum_t;
