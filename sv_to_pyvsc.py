@@ -642,10 +642,10 @@ class PyVSCGenerator:
         # Count inside constraints in original
         inside_matches = re.findall(r'(\w+)\s+inside\s*\{([^}]+)\}', body)
         for var, values in inside_matches:
-            # Check if this inside was translated
-            if f'self.{var} in vsc.rangelist(' not in generated_code:
+            # Check if this inside was translated (using .inside() method)
+            if f'self.{var}.inside(vsc.rangelist(' not in generated_code:
                 # Could be in an if block, check more carefully
-                pattern = f'self.{var}.*in vsc.rangelist'
+                pattern = f'self.{var}.*\\.inside\\(vsc\\.rangelist'
                 if not re.search(pattern, generated_code):
                     issues.append(f"Constraint '{constraint.name}': 'inside' for '{var}' may be missing")
         
@@ -1408,7 +1408,7 @@ from typing import Optional'''
                     if arr_inside_match:
                         arr, inside_body = arr_inside_match.groups()
                         rangelist = self._translate_inside(inside_body)
-                        lines.append(f"    self.{arr}[{idx_name}] in vsc.rangelist({rangelist})")
+                        lines.append(f"    self.{arr}[{idx_name}].inside(vsc.rangelist({rangelist}))")
                         has_content = True
                     else:
                         for line in self._translate_statement(inner):
@@ -1440,29 +1440,17 @@ from typing import Optional'''
         bit_slice_inside = re.match(r'(\w+)\[(\d+):(\d+)\]\s+inside\s*\{([^}]+)\}', stmt)
         if bit_slice_inside:
             var, high, low, inside_body = bit_slice_inside.groups()
-            high, low = int(high), int(low)
-            width = high - low + 1
-            mask = (1 << width) - 1
-            
-            self._add_review_item(
-                f"Bit slice '{var}[{high}:{low}]' in inside constraint converted to shift/mask"
-            )
-            
-            if low == 0:
-                var_expr = f"(self.{var} & 0x{mask:X})"
-            else:
-                var_expr = f"((self.{var} >> {low}) & 0x{mask:X})"
-            
             rangelist = self._translate_inside(inside_body)
-            return [f"{var_expr} in vsc.rangelist({rangelist})"]
-        
+            # Preserve bit slice syntax - PyVSC supports it
+            return [f"self.{var}[{high}:{low}].inside(vsc.rangelist({rangelist}))"]
+
         # Standard inside: var inside {...} or var.size() inside {...}
         match = re.match(r'(\w+(?:\.\w+\(\))?)\s+inside\s*\{([^}]+)\}', stmt)
         if match:
             var_expr, inside_body = match.groups()
             var_expr = var_expr.replace('.size()', '.size')
             rangelist = self._translate_inside(inside_body)
-            return [f"self.{var_expr} in vsc.rangelist({rangelist})"]
+            return [f"self.{var_expr}.inside(vsc.rangelist({rangelist}))"]
         return None
 
     def _try_negated_inside(self, stmt: str) -> Optional[List[str]]:
@@ -1471,7 +1459,7 @@ from typing import Optional'''
         if match:
             var_name, inside_body = match.groups()
             rangelist = self._translate_inside(inside_body)
-            return [f"self.{var_name} not in vsc.rangelist({rangelist})"]
+            return [f"vsc.not_inside(self.{var_name}, vsc.rangelist({rangelist}))"]
         return None
 
     def _try_impl_inside(self, stmt: str) -> Optional[List[str]]:
@@ -1481,29 +1469,17 @@ from typing import Optional'''
         if bit_slice_match:
             antecedent, var, high, low, inside_body = bit_slice_match.groups()
             ant_expr = self._translate_expression(antecedent.strip())
-            high, low = int(high), int(low)
-            width = high - low + 1
-            mask = (1 << width) - 1
-            
-            self._add_review_item(
-                f"Bit slice '{var}[{high}:{low}]' in implication converted to shift/mask"
-            )
-            
-            if low == 0:
-                var_expr = f"(self.{var} & 0x{mask:X})"
-            else:
-                var_expr = f"((self.{var} >> {low}) & 0x{mask:X})"
-            
             rangelist = self._translate_inside(inside_body)
-            return [f"vsc.implies({ant_expr}, {var_expr} in vsc.rangelist({rangelist}))"]
-        
+            # Preserve bit slice syntax - PyVSC supports it
+            return [f"vsc.implies({ant_expr}, self.{var}[{high}:{low}].inside(vsc.rangelist({rangelist})))"]
+
         # Standard implication with inside
         match = re.match(r'(.+?)\s*->\s*\(?\s*(\w+)\s+inside\s*\{([^}]+)\}\s*\)?', stmt)
         if match:
             antecedent, var_name, inside_body = match.groups()
             ant_expr = self._translate_expression(antecedent.strip())
             rangelist = self._translate_inside(inside_body)
-            return [f"vsc.implies({ant_expr}, self.{var_name} in vsc.rangelist({rangelist}))"]
+            return [f"vsc.implies({ant_expr}, self.{var_name}.inside(vsc.rangelist({rangelist})))"]
         return None
 
     def _try_implication(self, stmt: str) -> Optional[List[str]]:
@@ -1948,11 +1924,11 @@ from typing import Optional'''
             return expr
         
         # Don't convert if it's a rangelist or other vsc construct
-        if 'vsc.' in expr and 'in vsc.rangelist' not in expr:
+        if 'vsc.' in expr and '.inside(vsc.rangelist' not in expr:
             return expr
-        
-        # Handle 'in vsc.rangelist' - this is already a valid constraint
-        if 'in vsc.rangelist' in expr:
+
+        # Handle '.inside(vsc.rangelist' - this is already a valid constraint
+        if '.inside(vsc.rangelist' in expr:
             return expr
         
         # Handle 'not self.var' -> '(self.var == 0)'
@@ -2005,16 +1981,16 @@ from typing import Optional'''
         return expr
 
     def _convert_inside_expression(self, expr: str) -> str:
-        """Convert 'var inside {values}' to 'var in vsc.rangelist(values)'."""
+        """Convert 'var inside {values}' to 'var.inside(vsc.rangelist(values))'."""
         # Pattern: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
-        
+
         def replace_inside(match):
             var_name = match.group(1)
             values_str = match.group(2)
             rangelist = self._translate_inside(values_str)
-            return f'{var_name} in vsc.rangelist({rangelist})'
-        
+            return f'{var_name}.inside(vsc.rangelist({rangelist}))'
+
         return re.sub(pattern, replace_inside, expr)
 
     @staticmethod

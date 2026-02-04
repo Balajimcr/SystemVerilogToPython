@@ -80,7 +80,7 @@ class IspRandItemSmall(UvmSequenceItem):
     @vsc.constraint
     def cr1(self):
         vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsIspYuvFormat)
-        with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 16, 17, 20, 21)):
+        with vsc.if_then(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5, 16, 17, 20, 21))):
             self.IsIspYuvFormat == 0
         with vsc.else_then:
             self.IsIspYuvFormat == 1
@@ -89,7 +89,7 @@ class IspRandItemSmall(UvmSequenceItem):
     def cr4(self):
         vsc.solve_order(self.IsIspBypassMode, self.IsIspSrcCompType)
         with vsc.if_then((self.IsIspBypassMode != 0)):
-            self.IsIspSrcCompType in vsc.rangelist(0, 1)
+            self.IsIspSrcCompType.inside(vsc.rangelist(0, 1))
 
     @vsc.constraint
     def cr5(self):
@@ -108,9 +108,9 @@ class IspRandItemSmall(UvmSequenceItem):
         vsc.solve_order(self.IsIspSrcCompType, self.IsIspDstCompType)
         vsc.solve_order(self.IsIspDstCompType, self.IsIspInBittageType)
         vsc.solve_order(self.IsIspInBittageType, self.IsIspOutBittageType)
-        with vsc.if_then(self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8)):
+        with vsc.if_then(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5, 7, 8))):
             self.IsIspInBittageType == 0
-        with vsc.else_if(self.IsRdmaDataFormatYuv in vsc.rangelist(16, 17, 32, 33)):
+        with vsc.else_if(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(16, 17, 32, 33))):
             self.IsIspInBittageType == 1
         with vsc.else_then:
             self.IsIspInBittageType == 3
@@ -128,7 +128,7 @@ class IspRandItemSmall(UvmSequenceItem):
         with vsc.else_if(self.IsIspDstCompType > 0):
             self.IsIspOutBittageType == 1
         with vsc.else_then:
-            self.IsIspOutBittageType in vsc.rangelist(1, 3)
+            self.IsIspOutBittageType.inside(vsc.rangelist(1, 3))
 
     @vsc.constraint
     def cr8_solve_order_test(self):
@@ -149,7 +149,7 @@ class IspRandItemSmall(UvmSequenceItem):
         self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-1024, 1023))
         self.isp_grid_2d_0_2 in vsc.rangelist(vsc.rng(-512, 511))
         self.isp_grid_2d_0_3 in vsc.rangelist(vsc.rng(-512, 511))
-        self.isp_grid_2d_0_4 in vsc.rangelist(-100, -50, 0, 50, 100)
+        self.isp_grid_2d_0_4.inside(vsc.rangelist(-100, -50, 0, 50, 100))
         self.isp_grid_2d_0_6 in vsc.rangelist(vsc.rng(-2048, 2047))
 
     @vsc.constraint

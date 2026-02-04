@@ -110,8 +110,8 @@ translator.print_report(result)
 | SystemVerilog | PyVSC |
 |---------------|-------|
 | `var >= min && var <= max` | `var in vsc.rangelist(vsc.rng(min, max))` |
-| `inside {[a:b]}` | `x in vsc.rangelist(vsc.rng(a, b))` |
-| `inside {v1, v2}` | `x in vsc.rangelist(v1, v2)` |
+| `inside {[a:b]}` | `x.inside(vsc.rangelist(vsc.rng(a, b)))` |
+| `inside {v1, v2}` | `x.inside(vsc.rangelist(v1, v2))` |
 | `A -> B` | `vsc.implies(A, B)` |
 | `if (c) {...}` | `with vsc.if_then(c): ...` |
 | `else {...}` | `with vsc.else_then: ...` |
@@ -181,7 +181,7 @@ class AxiTransaction:
     def len_c(self):
         vsc.solve_order(self.addr, self.len)
         with vsc.if_then(self.addr[3:0] == 0):
-            self.len in vsc.rangelist(1, 2, 4, 8)
+            self.len.inside(vsc.rangelist(1, 2, 4, 8))
         with vsc.else_then:
             self.len == 1
 ```
