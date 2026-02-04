@@ -17,6 +17,12 @@ from enum import IntEnum
 import random
 from typing import Optional
 
+class TestEnum(IntEnum):
+    """Translated from SV enum: test_enum_t"""
+    TEST_ENUM_0 = 0
+    TEST_ENUM_1 = 1
+    TEST_ENUM_2 = 2
+
 # =============================================================================
 # BASE CLASS STUBS (from UVM or other libraries)
 # Replace these with actual implementations or imports as needed
@@ -69,7 +75,8 @@ class IspRandItemSmall(UvmSequenceItem):
 
     @vsc.constraint
     def CR_TEST_IMPLICATION(self):
-        vsc.implies((self.TestRandNibble == 0xF), (self.TestRandInt == 42))
+        with vsc.implies((self.TestRandNibble == 0xF)):
+            (self.TestRandInt == 42)
 
     @vsc.constraint
     def CR_TEST_FOREACH(self):
@@ -101,7 +108,7 @@ class IspRandItemSmall(UvmSequenceItem):
     def CR_TEST_MULTI_SOLVE_FANIN(self):
         vsc.solve_order(self.TestEnum, self.TestRandInt)
         vsc.solve_order(self.TestRandNibble, self.TestRandInt)
-        with vsc.if_then(self.TestEnum == self.TEST_ENUM_1):
+        with vsc.if_then(self.TestEnum == TestEnum.TEST_ENUM_1):
             self.TestRandInt == 15
 
     @vsc.constraint
@@ -110,7 +117,7 @@ class IspRandItemSmall(UvmSequenceItem):
         vsc.solve_order(self.TestRandInt, self.TestEnum)
         with vsc.if_then(self.TestRandInt == 20):
             self.TestRandNibble == 0xA
-        self.TestEnum == self.TEST_ENUM_2
+        self.TestEnum == TestEnum.TEST_ENUM_2
 
     @vsc.constraint
     def CR_VAR_RANGE_IsIspBypassMode(self):
@@ -247,12 +254,18 @@ if __name__ == '__main__':
 
     # Create and randomize IspRandItemSmall
     isp_rand_item_small = IspRandItemSmall()
-    isp_rand_item_small.randomize()
-    print(f'IspRandItemSmall randomized successfully')
+    isp_rand_item_small_randomized = False
+    try:
+        isp_rand_item_small.randomize()
+        isp_rand_item_small_randomized = True
+        print(f'IspRandItemSmall randomized successfully')
+    except Exception as e:
+        print(f'IspRandItemSmall randomize failed: {e}')
 
-    # Print field values
-    print(f'  TestRandInt = {isp_rand_item_small.TestRandInt}')
-    print(f'  TestRandNibble = {isp_rand_item_small.TestRandNibble}')
-    print(f'  TestEnum = {isp_rand_item_small.TestEnum}')
-    print(f'  TestFixedArr = {isp_rand_item_small.TestFixedArr}')
-    print(f'  TestDynArr = {isp_rand_item_small.TestDynArr}')
+    if isp_rand_item_small_randomized:
+        # Print field values
+        print(f'  TestRandInt = {isp_rand_item_small.TestRandInt}')
+        print(f'  TestRandNibble = {isp_rand_item_small.TestRandNibble}')
+        print(f'  TestEnum = {isp_rand_item_small.TestEnum}')
+        print(f'  TestFixedArr = {isp_rand_item_small.TestFixedArr}')
+        print(f'  TestDynArr = {isp_rand_item_small.TestDynArr}')

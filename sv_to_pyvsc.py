@@ -175,7 +175,7 @@ class SVParser:
     def _extract_enums(self, code: str) -> List[SVEnum]:
         """Extract enum definitions."""
         enums = []
-        pattern = r'typedef\s+enum\s+(?:bit\s*\[(\d+):0\]\s*)?\{([^}]+)\}\s*(\w+)\s*;'
+        pattern = r'typedef\s+enum(?:\s+\w+\s*(?:\[(\d+):0\])?)?\s*\{([^}]+)\}\s*(\w+)\s*;'
 
         for match in re.finditer(pattern, code, re.DOTALL):
             width_str, values_str, name = match.groups()
@@ -510,6 +510,19 @@ class PyVSCGenerator:
         
         # Analyze source SV code for metrics
         self._analyze_sv_source(sv_classes)
+
+        # Build enum value -> enum class name map for expression translation
+        for sv_class in sv_classes:
+            for enum in sv_class.enums:
+                class_name = self._to_python_class_name(enum.name)
+                self.enum_class_names.add(class_name)
+                for value_name, _ in enum.values:
+                    if value_name in self.enum_value_map and self.enum_value_map[value_name] != class_name:
+                        self._add_warning(
+                            f"Enum value '{value_name}' appears in multiple enums; using '{self.enum_value_map[value_name]}'"
+                        )
+                        continue
+                    self.enum_value_map[value_name] = class_name
         
         code_parts = [
             self._generate_header(),
@@ -750,6 +763,8 @@ class PyVSCGenerator:
         self.manual_review_items = []
         self.mapping_notes = []
         self.statistics = {'classes': 0, 'fields': 0, 'constraints': 0, 'enums': 0}
+        self.enum_value_map = {}
+        self.enum_class_names = set()
         
         # Detailed conversion metrics
         self.metrics = {
@@ -1498,7 +1513,10 @@ from typing import Optional'''
             ant_expr = self._translate_expression(antecedent.strip())
             rangelist = self._translate_inside(inside_body)
             # Preserve bit slice syntax - PyVSC supports it
-            return [f"vsc.implies({ant_expr}, self.{var}[{high}:{low}].inside(vsc.rangelist({rangelist})))"]
+            return [
+                f"with vsc.implies({ant_expr}):",
+                f"{self.INDENT}self.{var}[{high}:{low}].inside(vsc.rangelist({rangelist}))"
+            ]
 
         # Standard implication with inside
         match = re.match(r'(.+?)\s*->\s*\(?\s*(\w+)\s+inside\s*\{([^}]+)\}\s*\)?', stmt)
@@ -1506,7 +1524,10 @@ from typing import Optional'''
             antecedent, var_name, inside_body = match.groups()
             ant_expr = self._translate_expression(antecedent.strip())
             rangelist = self._translate_inside(inside_body)
-            return [f"vsc.implies({ant_expr}, self.{var_name}.inside(vsc.rangelist({rangelist})))"]
+            return [
+                f"with vsc.implies({ant_expr}):",
+                f"{self.INDENT}self.{var_name}.inside(vsc.rangelist({rangelist}))"
+            ]
         return None
 
     def _try_implication(self, stmt: str) -> Optional[List[str]]:
@@ -1515,7 +1536,10 @@ from typing import Optional'''
         if match:
             ant_expr = self._translate_expression(match.group(1).strip())
             cons_expr = self._translate_expression(match.group(2).strip())
-            return [f"vsc.implies({ant_expr}, {cons_expr})"]
+            return [
+                f"with vsc.implies({ant_expr}):",
+                f"{self.INDENT}{cons_expr}"
+            ]
         return None
 
     def _try_conditional(self, stmt: str) -> Optional[List[str]]:
@@ -1977,9 +2001,26 @@ from typing import Optional'''
         expr = self._convert_logical_operators(expr)
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
+        expr = self._qualify_enum_values(expr)
         expr = self._add_self_prefix(expr)
         expr = self._convert_bare_conditions(expr)
         return expr
+
+    def _qualify_enum_values(self, expr: str) -> str:
+        """Qualify enum value literals with their enum class name."""
+        if not self.enum_value_map:
+            return expr
+
+        def replace_enum(match):
+            name = match.group(0)
+            if name not in self.enum_value_map:
+                return name
+            start = match.start()
+            if start > 0 and expr[start - 1] == '.':
+                return name
+            return f"{self.enum_value_map[name]}.{name}"
+
+        return re.sub(r'\b[A-Z][A-Z0-9_]*\b', replace_enum, expr)
 
     def _convert_bare_conditions(self, expr: str) -> str:
         """Convert bare variable conditions to PyVSC-compatible comparisons.
@@ -2082,6 +2123,11 @@ from typing import Optional'''
             start = match.start()
             if start > 0 and expr[start-1] == '.':
                 return word
+            if word in self.enum_class_names:
+                end = match.end()
+                if end < len(expr) and expr[end] == '.':
+                    return word
+                return f"self.{word}"
             return f"self.{word}"
 
         result = re.sub(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', replace_var, expr)
@@ -2212,15 +2258,21 @@ from typing import Optional'''
             lines.extend([
                 f"    # Create and randomize {class_name}",
                 f"    {var_name} = {class_name}()",
-                f"    {var_name}.randomize()",
-                f"    print(f'{class_name} randomized successfully')",
+                f"    {var_name}_randomized = False",
+                f"    try:",
+                f"        {var_name}.randomize()",
+                f"        {var_name}_randomized = True",
+                f"        print(f'{class_name} randomized successfully')",
+                f"    except Exception as e:",
+                f"        print(f'{class_name} randomize failed: {{e}}')",
                 ""
             ])
 
             if sv_class.fields:
-                lines.append("    # Print field values")
+                lines.append(f"    if {var_name}_randomized:")
+                lines.append("        # Print field values")
                 for fld in sv_class.fields[:5]:
-                    lines.append(f"    print(f'  {fld.name} = {{{var_name}.{fld.name}}}')")
+                    lines.append(f"        print(f'  {fld.name} = {{{var_name}.{fld.name}}}')")
                 lines.append("")
 
         return '\n'.join(lines)
