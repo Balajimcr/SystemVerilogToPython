@@ -952,8 +952,27 @@ from typing import Optional'''
         else:
             lines.append(f"{self.INDENT}{self.INDENT}pass  # No fields found")
 
-        # Generate constraints
+        # Separate simple range constraints from other constraints
+        range_constraints = []
+        other_constraints = []
         for constraint in sv_class.constraints:
+            range_line = self._extract_simple_range_constraint(constraint)
+            if range_line:
+                range_constraints.append(range_line)
+            else:
+                other_constraints.append(constraint)
+
+        # Generate grouped parameter_range constraint if there are range constraints
+        if range_constraints:
+            lines.append("")
+            lines.append(f"{self.INDENT}@vsc.constraint")
+            lines.append(f"{self.INDENT}def parameter_range(self):")
+            for range_line in range_constraints:
+                lines.append(f"{self.INDENT}{self.INDENT}{range_line}")
+            self.statistics['constraints'] += 1
+
+        # Generate other constraints
+        for constraint in other_constraints:
             lines.append("")
             lines.extend(self._generate_constraint(constraint))
             self.statistics['constraints'] += 1
@@ -970,6 +989,50 @@ from typing import Optional'''
             lines.extend(self._generate_hook('post_randomize', sv_class.post_randomize))
 
         return '\n'.join(lines)
+
+    def _extract_simple_range_constraint(self, constraint: SVConstraint) -> Optional[str]:
+        """
+        Check if constraint is a simple range constraint (var >= min && var <= max).
+        Returns the translated rangelist line if it is, None otherwise.
+        """
+        body = constraint.body.strip()
+        # Remove trailing semicolon
+        body = body.rstrip(';').strip()
+
+        # Check for parenthesized form
+        while body.startswith('(') and body.endswith(')'):
+            inner = body[1:-1]
+            depth = 0
+            valid = True
+            for ch in inner:
+                if ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth < 0:
+                        valid = False
+                        break
+            if valid and depth == 0:
+                body = inner.strip()
+            else:
+                break
+
+        # Pattern: var >= min && var <= max  OR  var >= min & var <= max
+        pattern1 = r'^(\w+)\s*>=\s*(-?\d+)\s*(?:&&|&)\s*\1\s*<=\s*(-?\d+)$'
+        # Pattern: var <= max && var >= min  OR  var <= max & var >= min
+        pattern2 = r'^(\w+)\s*<=\s*(-?\d+)\s*(?:&&|&)\s*\1\s*>=\s*(-?\d+)$'
+
+        match = re.match(pattern1, body)
+        if match:
+            var_name, min_val, max_val = match.groups()
+            return f"self.{var_name}.inside(vsc.rangelist(vsc.rng({min_val}, {max_val})))"
+
+        match = re.match(pattern2, body)
+        if match:
+            var_name, max_val, min_val = match.groups()
+            return f"self.{var_name}.inside(vsc.rangelist(vsc.rng({min_val}, {max_val})))"
+
+        return None
 
     def _generate_field(self, fld: SVField) -> str:
         """Generate pyvsc field declaration."""
@@ -999,22 +1062,15 @@ from typing import Optional'''
         # Handle signed bit/logic types - map to appropriate signed int type
         if fld.data_type in ('bit', 'logic') and fld.is_signed:
             # Map signed bit widths to appropriate signed integer types
-            if fld.width <= 8:
-                return f"{prefix}int8_t()"
-            elif fld.width <= 16:
-                return f"{prefix}int16_t()"
-            elif fld.width <= 32:
-                return f"{prefix}int32_t()"
-            else:
-                return f"{prefix}int64_t()"
+            return f"{prefix}int_t({fld.width})"
 
         type_map = {
             'bit': f"{prefix}bit_t({fld.width})",
             'logic': f"{prefix}bit_t({fld.width})",
-            'int': f"{prefix}int32_t()" if fld.is_signed else f"{prefix}uint32_t()",
-            'byte': f"{prefix}int8_t()",
-            'shortint': f"{prefix}int16_t()",
-            'longint': f"{prefix}int64_t()",
+            'int': f"{prefix}int_t(32)" if fld.is_signed else f"{prefix}uint_t(32)",
+            'byte': f"{prefix}int_t(8)",
+            'shortint': f"{prefix}int_t(16)",
+            'longint': f"{prefix}int_t(64)",
         }
 
         return type_map.get(fld.data_type, f"{prefix}bit_t({fld.width})")
@@ -1025,17 +1081,10 @@ from typing import Optional'''
         if fld.data_type in ('bit', 'logic'):
             if fld.is_signed:
                 # Map signed bit widths to appropriate signed integer types
-                if fld.width <= 8:
-                    return "vsc.int8_t()"
-                elif fld.width <= 16:
-                    return "vsc.int16_t()"
-                elif fld.width <= 32:
-                    return "vsc.int32_t()"
-                else:
-                    return "vsc.int64_t()"
+                return f"vsc.int_t({fld.width})"
             return f"vsc.bit_t({fld.width})"
         elif fld.data_type == 'int':
-            return "vsc.int32_t()"
+            return "vsc.int_t(32)"
         return f"vsc.bit_t({fld.width})"
 
     def _generate_constraint(self, constraint: SVConstraint) -> List[str]:

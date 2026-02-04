@@ -44,7 +44,7 @@ class IspRandItemSmall(UvmSequenceItem):
 
     def __init__(self):
         super().__init__()
-        self.TestRandInt = vsc.rand_int32_t()
+        self.TestRandInt = vsc.rand_int_t(32)
         self.TestRandNibble = vsc.rand_bit_t(4)
         self.TestEnum = vsc.rand_enum_t(TestEnum)
         self.TestFixedArr = vsc.rand_list_t(vsc.bit_t(8), sz=4)
@@ -57,16 +57,24 @@ class IspRandItemSmall(UvmSequenceItem):
         self.IsIspOutBittageType = vsc.rand_bit_t(32)
         self.IsRdmaDataFormatYuv = vsc.rand_bit_t(32)
         self.IsWdmaDataFormatYuv = vsc.rand_bit_t(32)
-        self.isp_grid_2d_0_0 = vsc.rand_int32_t()
-        self.isp_grid_2d_0_1 = vsc.rand_int32_t()
-        self.isp_grid_2d_0_2 = vsc.rand_int32_t()
-        self.isp_grid_2d_0_3 = vsc.rand_int32_t()
-        self.isp_grid_2d_0_4 = vsc.rand_int32_t()
-        self.isp_grid_2d_0_6 = vsc.rand_int32_t()
+        self.isp_grid_2d_0_0 = vsc.rand_int_t(32)
+        self.isp_grid_2d_0_1 = vsc.rand_int_t(32)
+        self.isp_grid_2d_0_2 = vsc.rand_int_t(32)
+        self.isp_grid_2d_0_3 = vsc.rand_int_t(32)
+        self.isp_grid_2d_0_4 = vsc.rand_int_t(32)
+        self.isp_grid_2d_0_6 = vsc.rand_int_t(32)
 
     @vsc.constraint
-    def CR_TEST_RAND_INT_RANGE(self):
-        self.TestRandInt in vsc.rangelist(vsc.rng(10, 20))
+    def parameter_range(self):
+        self.TestRandInt.inside(vsc.rangelist(vsc.rng(10, 20)))
+        self.IsIspBypassMode.inside(vsc.rangelist(vsc.rng(0, 1)))
+        self.IsIspYuvFormat.inside(vsc.rangelist(vsc.rng(0, 1)))
+        self.IsIspSrcCompType.inside(vsc.rangelist(vsc.rng(0, 2)))
+        self.IsIspDstCompType.inside(vsc.rangelist(vsc.rng(0, 2)))
+        self.IsIspInBittageType.inside(vsc.rangelist(vsc.rng(0, 3)))
+        self.IsIspOutBittageType.inside(vsc.rangelist(vsc.rng(0, 3)))
+        self.isp_grid_2d_0_0.inside(vsc.rangelist(vsc.rng(-8388607, 8388607)))
+        self.isp_grid_2d_0_1.inside(vsc.rangelist(vsc.rng(-8388607, 8388607)))
 
     @vsc.constraint
     def CR_TEST_INSIDE_FORMS(self):
@@ -118,30 +126,6 @@ class IspRandItemSmall(UvmSequenceItem):
         with vsc.if_then(self.TestRandInt == 20):
             self.TestRandNibble == 0xA
         self.TestEnum == TestEnum.TEST_ENUM_2
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspBypassMode(self):
-        self.IsIspBypassMode in vsc.rangelist(vsc.rng(0, 1))
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspYuvFormat(self):
-        self.IsIspYuvFormat in vsc.rangelist(vsc.rng(0, 1))
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspSrcCompType(self):
-        self.IsIspSrcCompType in vsc.rangelist(vsc.rng(0, 2))
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspDstCompType(self):
-        self.IsIspDstCompType in vsc.rangelist(vsc.rng(0, 2))
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspInBittageType(self):
-        self.IsIspInBittageType in vsc.rangelist(vsc.rng(0, 3))
-
-    @vsc.constraint
-    def CR_VAR_RANGE_IsIspOutBittageType(self):
-        self.IsIspOutBittageType in vsc.rangelist(vsc.rng(0, 3))
 
     @vsc.constraint
     def cr1(self):
@@ -235,14 +219,6 @@ class IspRandItemSmall(UvmSequenceItem):
     @vsc.constraint
     def cr12_bit_slice(self):
         self.IsIspSrcCompType[15:0] == self.IsIspDstCompType[15:0]
-
-    @vsc.constraint
-    def cr13_paren_range(self):
-        self.isp_grid_2d_0_0 in vsc.rangelist(vsc.rng(-8388607, 8388607))
-
-    @vsc.constraint
-    def cr14_paren_range(self):
-        self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-8388607, 8388607))
 
 # =============================================================================
 # USAGE EXAMPLE
