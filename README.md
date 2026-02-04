@@ -15,18 +15,21 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 - **Parses SystemVerilog** constraint classes, enums, and hierarchies
 - **Generates PyVSC code** with proper decorators and type mappings
 - **Translates constraint constructs**:
-  - `rand`/`randc` fields
+  - `rand`/`randc` fields with proper type mapping
   - `inside` range constraints → `vsc.rangelist()`
-  - Range constraints (`var >= min && var <= max`) → `vsc.rangelist(vsc.rng(min, max))`
-  - Implications (`->`) → `vsc.implies()`
-  - Conditional constraints (`if/else`) → `vsc.if_then/else_then`
+  - Range constraints (`var >= min && var <= max`) → grouped into `parameter_range` constraint
+  - Implications (`->`) → `with vsc.implies():`
+  - Conditional constraints (`if/else/begin/end`) → `vsc.if_then/else_if/else_then`
   - Weighted distributions (`dist`) → `vsc.dist()`
-  - Solve order (`solve before`) → `vsc.solve_order()`
+  - Solve order (`solve before`) → `vsc.solve_order()` (placed first in constraints)
   - Unique constraints → `vsc.unique()`
   - Foreach loops → `vsc.foreach()`
   - Soft constraints → `vsc.soft()`
+  - Negated inside → `vsc.not_inside()`
   - Bit slicing (`var[7:0]`) - preserved as-is
-  - Signed variables (`rand bit signed [31:0]`) → `vsc.rand_int32_t()`
+  - Logical operators: `&&` → `&`, `||` → `|`, `!` → `~`
+  - Signed variables (`rand bit signed [N:0]`) → `vsc.rand_int_t(N)`
+  - Standard int types with signed/unsigned support
 - **Clean output by default** - no comments or docstrings cluttering the code
 - **Verbose mode (-r)** - includes original SV code and metrics in docstrings
 - **Flags items requiring manual review**
@@ -93,37 +96,129 @@ translator.print_report(result)
 
 ## Translation Mapping Reference
 
-### Data Types
+### 1. Scalar Fixed-Width Types
 
-| SystemVerilog | PyVSC (Random) | PyVSC (Non-Random) |
-|---------------|----------------|---------------------|
-| `rand bit [N-1:0]` | `vsc.rand_bit_t(N)` | `vsc.bit_t(N)` |
-| `rand bit signed [N-1:0]` | `vsc.rand_int32_t()` | `vsc.int32_t()` |
-| `randc bit [N-1:0]` | `vsc.randc_bit_t(N)` | N/A |
-| `rand int` | `vsc.rand_int32_t()` | `vsc.int32_t()` |
-| `rand enum` | `vsc.rand_enum_t(EnumType)` | `vsc.enum_t(EnumType)` |
-| `rand T arr[N]` | `vsc.rand_list_t(T, sz=N)` | `vsc.list_t(T, sz=N)` |
-| `rand T arr[]` | `vsc.rand_list_t(T)` | `vsc.list_t(T)` |
+#### Bit / Logic Vectors
 
-### Constraints
+| SystemVerilog | Meaning | PyVSC (Random) | PyVSC (Non-Random) |
+|---------------|---------|----------------|---------------------|
+| `rand bit [N-1:0] x;` | Unsigned bit vector | `vsc.rand_bit_t(N)` | `vsc.bit_t(N)` |
+| `rand logic [N-1:0] x;` | Same as bit | `vsc.rand_bit_t(N)` | `vsc.bit_t(N)` |
+| `rand bit signed [N-1:0] x;` | Signed vector | `vsc.rand_int_t(N)` | `vsc.int_t(N)` |
+
+> ⚠️ **Important**: PyVSC does not model signed bit-vectors directly. If the SV field is signed, map it to an integer type, not `bit_t`.
+
+#### Integer Types (SystemVerilog built-ins)
+
+| SystemVerilog | Width | Signed | PyVSC (Random) | PyVSC (Non-Random) |
+|---------------|-------|--------|----------------|---------------------|
+| `rand byte` | 8 | yes | `vsc.rand_int8_t()` | `vsc.int8_t()` |
+| `rand byte unsigned` | 8 | no | `vsc.rand_uint8_t()` | `vsc.uint8_t()` |
+| `rand shortint` | 16 | yes | `vsc.rand_int16_t()` | `vsc.int16_t()` |
+| `rand shortint unsigned` | 16 | no | `vsc.rand_uint16_t()` | `vsc.uint16_t()` |
+| `rand int` | 32 | yes | `vsc.rand_int32_t()` | `vsc.int32_t()` |
+| `rand int unsigned` | 32 | no | `vsc.rand_uint32_t()` | `vsc.uint32_t()` |
+| `rand longint` | 64 | yes | `vsc.rand_int64_t()` | `vsc.int64_t()` |
+| `rand longint unsigned` | 64 | no | `vsc.rand_uint64_t()` | `vsc.uint64_t()` |
+
+> ✅ **Best practice**: If SV uses `int`, `shortint`, etc. → always use these standard-width PyVSC types, not `bit_t`.
+
+### 2. Arbitrary-Width Scalars
+
+Use these when SV uses custom bit widths that are not standard integers.
+
+| Signed | Random | PyVSC Type | Example SV |
+|--------|--------|------------|------------|
+| No | Yes | `vsc.rand_bit_t(N)` | `rand bit [13:0]` |
+| No | No | `vsc.bit_t(N)` | `bit [9:0]` |
+| Yes | Yes | `vsc.rand_int_t(N)` | `rand logic signed [11:0]` |
+| Yes | No | `vsc.int_t(N)` | `logic signed [20:0]` |
+
+```python
+self.a = vsc.rand_bit_t(14)    # rand bit [13:0]
+self.b = vsc.rand_int_t(12)    # rand logic signed [11:0]
+```
+
+### 3. Enums
+
+| SystemVerilog | PyVSC |
+|---------------|-------|
+| `typedef enum {...} e_t; rand e_t x;` | `vsc.rand_enum_t(E)` |
+| non-rand enum | `vsc.enum_t(E)` |
+
+```python
+class Mode(IntEnum):
+    A = 0
+    B = 1
+
+self.mode = vsc.rand_enum_t(Mode)
+```
+
+### 4. Arrays
+
+#### Fixed-Size Arrays
+
+| SystemVerilog | PyVSC |
+|---------------|-------|
+| `rand bit [7:0] a[16];` | `vsc.rand_list_t(vsc.bit_t(8), sz=16)` |
+| `bit [3:0] b[8];` | `vsc.list_t(vsc.bit_t(4), sz=8)` |
+
+#### Dynamic Arrays
+
+| SystemVerilog | PyVSC |
+|---------------|-------|
+| `rand bit [7:0] a[];` | `vsc.rand_list_t(vsc.bit_t(8))` |
+
+### 5. Cyclic Randomization (randc)
+
+| SystemVerilog | PyVSC |
+|---------------|-------|
+| `randc bit [N-1:0] x;` | `vsc.randc_bit_t(N)` |
+
+> ⚠️ No `randc` equivalent for integers or enums in PyVSC.
+
+### 6. Operator Mappings (Constraints)
+
+#### Logical / Boolean Operators
+
+| SystemVerilog | Meaning | PyVSC Equivalent | Notes |
+|---------------|---------|------------------|-------|
+| `&&` | Logical AND | `&` | Required (do not use `and`) |
+| `\|\|` | Logical OR | `\|` | Required (do not use `or`) |
+| `!a` | Logical NOT | `~a` | Use parentheses for safety |
+| `!(a && b)` | NOT (AND) | `~(a & b)` | Exact semantic match |
+| `!(a \|\| b)` | NOT (OR) | `~(a \| b)` | Exact semantic match |
+
+### 7. Constraint Constructs
 
 | SystemVerilog | PyVSC |
 |---------------|-------|
 | `var >= min && var <= max` | `var in vsc.rangelist(vsc.rng(min, max))` |
-| `inside {[a:b]}` | `x.inside(vsc.rangelist(vsc.rng(a, b)))` |
-| `inside {v1, v2}` | `x.inside(vsc.rangelist(v1, v2))` |
-| `A -> B` | `vsc.implies(A, B)` |
+| `inside {[a:b]}` | `x in vsc.rangelist(vsc.rng(a, b))` |
+| `inside {v1, v2}` | `x in vsc.rangelist(v1, v2)` |
+| `!(x inside {...})` | `vsc.not_inside(x, vsc.rangelist(...))` |
+| `A -> B` | `with vsc.implies(A): B` |
 | `if (c) {...}` | `with vsc.if_then(c): ...` |
+| `else if (c) {...}` | `with vsc.else_if(c): ...` |
 | `else {...}` | `with vsc.else_then: ...` |
+| `if (c) begin ... end` | `with vsc.if_then(c): ...` (multi-line) |
 | `dist {v := w}` | `vsc.dist(x, [vsc.weight(v, w)])` |
 | `solve a before b` | `vsc.solve_order(a, b)` |
 | `unique {arr}` | `vsc.unique(arr)` |
-| `foreach (a[i])` | `with vsc.foreach(a, idx=True) as i:` |
+| `foreach (a[i]) {...}` | `with vsc.foreach(a, idx=True) as i: ...` |
 | `soft x == v` | `vsc.soft(x == v)` |
 | `var[7:0]` | `var[7:0]` (preserved) |
-| `&&` | `and` |
-| `\|\|` | `or` |
-| `&` / `\|` | `&` / `\|` (preserved) |
+
+### 8. Quick Translation Checklist
+
+- ✅ Unsigned bit vector → `rand_bit_t(N)`
+- ✅ Signed field → never `bit_t`, always `int*_t` or `int_t(N)`
+- ✅ SV `int` → `rand_int32_t()` (not `rand_bit_t(32)`)
+- ✅ SV `int unsigned` → `rand_uint32_t()`
+- ✅ Enums → Python `IntEnum` + `rand_enum_t`
+- ✅ Arrays → `rand_list_t(inner_type)`
+- ✅ Prefer standard widths (8/16/32/64) when possible
+- ✅ `&&` → `&`, `||` → `|`, `!` → `~`
 
 ### Constraint Ordering
 
@@ -166,22 +261,20 @@ endclass
 class AxiTransaction:
     def __init__(self):
         self.addr = vsc.rand_bit_t(32)
-        self.offset = vsc.rand_int16_t()
+        self.offset = vsc.rand_int_t(16)  # signed bit vector -> int_t
         self.len = vsc.rand_bit_t(8)
 
     @vsc.constraint
-    def addr_range_c(self):
+    def parameter_range(self):
+        # Simple range constraints are grouped together
         self.addr in vsc.rangelist(vsc.rng(0, 4095))
-
-    @vsc.constraint
-    def offset_range_c(self):
         self.offset in vsc.rangelist(vsc.rng(-1024, 1023))
 
     @vsc.constraint
     def len_c(self):
         vsc.solve_order(self.addr, self.len)
         with vsc.if_then(self.addr[3:0] == 0):
-            self.len.inside(vsc.rangelist(1, 2, 4, 8))
+            self.len in vsc.rangelist(1, 2, 4, 8)
         with vsc.else_then:
             self.len == 1
 ```
