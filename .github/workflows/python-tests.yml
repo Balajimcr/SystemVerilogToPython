@@ -1,0 +1,71 @@
+name: Python Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyvsc
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Verify translator syntax
+      run: |
+        python -m py_compile sv_to_pyvsc.py
+        echo "Translator syntax OK"
+
+    - name: Run translation on example file
+      run: |
+        python sv_to_pyvsc.py example_sv_classes.sv -o test_output.py -q
+        echo "Translation completed"
+
+    - name: Verify generated code syntax
+      run: |
+        python -m py_compile test_output.py
+        echo "Generated code syntax OK"
+
+    - name: Run generated code with pyvsc
+      run: |
+        python test_output.py
+        echo "Generated code executed successfully"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 sv_to_pyvsc.py --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 sv_to_pyvsc.py --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics
