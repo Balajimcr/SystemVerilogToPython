@@ -232,8 +232,8 @@ class SVParser:
         patterns = [
             # rand/randc bit/logic [signed] [N:0] name [array]
             r'(rand|randc)?\s*(bit|logic)\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*;',
-            # rand/randc int/byte/shortint/longint [unsigned] name
-            r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(unsigned))?\s+(\w+)\s*;',
+            # rand/randc int/byte/shortint/longint [signed|unsigned] name
+            r'(rand|randc)?\s*(int|byte|shortint|longint)(?:\s+(signed|unsigned))?\s+(\w+)\s*;',
             # rand/randc enum_type name
             r'(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*;',
         ]
@@ -271,6 +271,25 @@ class SVParser:
                         fields.append(SVField(
                             name=name, width=width, field_type=field_type,
                             original_line=f"{rand_type or ''} {data_type} {'signed ' if is_signed else ''}[{width-1}:0] {name};".strip(),
+                            data_type=data_type,
+                            is_signed=is_signed
+                        ))
+                continue
+
+            # Handle comma-separated int declarations: rand int signed a, b, c;
+            int_comma_match = re.match(r'(rand|randc)?\s*(int|byte|shortint|longint)\s*(signed|unsigned)?\s+(\w+(?:\s*,\s*\w+)+)', line)
+            if int_comma_match:
+                rand_type, data_type, sign_spec, names_str = int_comma_match.groups()
+                width = WIDTH_MAP[data_type]
+                is_signed = sign_spec != 'unsigned'  # Default is signed for int types
+                field_type = {'rand': FieldType.RAND, 'randc': FieldType.RANDC}.get(rand_type, FieldType.NON_RAND)
+
+                for name in names_str.split(','):
+                    name = name.strip()
+                    if name and self._is_valid_field_name(name):
+                        fields.append(SVField(
+                            name=name, width=width, field_type=field_type,
+                            original_line=f"{rand_type or ''} {data_type} {sign_spec or 'signed'} {name};".strip(),
                             data_type=data_type,
                             is_signed=is_signed
                         ))
@@ -379,12 +398,22 @@ class SVParser:
 
     def _parse_int_field(self, groups: tuple, original: str,
                          field_type: FieldType, data_type: str) -> SVField:
-        """Parse integer type field declaration."""
+        """Parse integer type field declaration.
+
+        Integer types are signed by default in SystemVerilog.
+        - 'signed' keyword: explicitly signed (default behavior)
+        - 'unsigned' keyword: explicitly unsigned
+        - no keyword: signed by default
+        """
+        sign_spec = groups[2] if len(groups) > 2 else None
+        # Default is signed for int types, unless 'unsigned' is specified
+        is_signed = sign_spec != 'unsigned'
+
         return SVField(
             name=groups[3],
             width=WIDTH_MAP[data_type],
             field_type=field_type,
-            is_signed=len(groups) <= 2 or groups[2] != 'unsigned',
+            is_signed=is_signed,
             original_line=original,
             data_type=data_type
         )
@@ -1053,38 +1082,64 @@ from typing import Optional'''
         return f"self.{fld.name} = {self._get_pyvsc_type(fld)}{comment}"
 
     def _get_pyvsc_type(self, fld: SVField) -> str:
-        """Get pyvsc type string for a field."""
+        """Get pyvsc type string for a field.
+
+        Type mapping follows PyVSC conventions:
+        - Unsigned bit/logic vectors -> bit_t(N)
+        - Signed bit/logic vectors -> int_t(N) (PyVSC doesn't support signed bit_t)
+        - Standard integer types -> use standard width types (int8_t, int16_t, etc.)
+        - randc -> randc_bit_t(N)
+        """
         if fld.field_type == FieldType.RANDC:
+            # randc only supports bit_t in PyVSC
             return f"vsc.randc_bit_t({fld.width})"
 
         prefix = "vsc.rand_" if fld.field_type == FieldType.RAND else "vsc."
 
-        # Handle signed bit/logic types - map to appropriate signed int type
+        # Handle signed bit/logic types - map to int_t (PyVSC doesn't support signed bit_t)
         if fld.data_type in ('bit', 'logic') and fld.is_signed:
-            # Map signed bit widths to appropriate signed integer types
             return f"{prefix}int_t({fld.width})"
 
-        type_map = {
-            'bit': f"{prefix}bit_t({fld.width})",
-            'logic': f"{prefix}bit_t({fld.width})",
-            'int': f"{prefix}int_t(32)" if fld.is_signed else f"{prefix}uint_t(32)",
-            'byte': f"{prefix}int_t(8)",
-            'shortint': f"{prefix}int_t(16)",
-            'longint': f"{prefix}int_t(64)",
-        }
+        # Handle unsigned bit/logic types
+        if fld.data_type in ('bit', 'logic'):
+            return f"{prefix}bit_t({fld.width})"
 
-        return type_map.get(fld.data_type, f"{prefix}bit_t({fld.width})")
+        # Handle standard integer types with proper signed/unsigned mapping
+        # byte (8-bit), shortint (16-bit), int (32-bit), longint (64-bit)
+        if fld.data_type == 'byte':
+            return f"{prefix}int8_t()" if fld.is_signed else f"{prefix}uint8_t()"
+        elif fld.data_type == 'shortint':
+            return f"{prefix}int16_t()" if fld.is_signed else f"{prefix}uint16_t()"
+        elif fld.data_type == 'int':
+            return f"{prefix}int32_t()" if fld.is_signed else f"{prefix}uint32_t()"
+        elif fld.data_type == 'longint':
+            return f"{prefix}int64_t()" if fld.is_signed else f"{prefix}uint64_t()"
+
+        # Default fallback
+        return f"{prefix}bit_t({fld.width})"
 
     @staticmethod
     def _get_inner_type(fld: SVField) -> str:
-        """Get inner type for array."""
+        """Get inner type for array elements (non-random types)."""
+        # Signed bit/logic -> int_t (PyVSC doesn't support signed bit_t)
+        if fld.data_type in ('bit', 'logic') and fld.is_signed:
+            return f"vsc.int_t({fld.width})"
+
+        # Unsigned bit/logic -> bit_t
         if fld.data_type in ('bit', 'logic'):
-            if fld.is_signed:
-                # Map signed bit widths to appropriate signed integer types
-                return f"vsc.int_t({fld.width})"
             return f"vsc.bit_t({fld.width})"
+
+        # Standard integer types with proper signed/unsigned mapping
+        if fld.data_type == 'byte':
+            return "vsc.int8_t()" if fld.is_signed else "vsc.uint8_t()"
+        elif fld.data_type == 'shortint':
+            return "vsc.int16_t()" if fld.is_signed else "vsc.uint16_t()"
         elif fld.data_type == 'int':
-            return "vsc.int_t(32)"
+            return "vsc.int32_t()" if fld.is_signed else "vsc.uint32_t()"
+        elif fld.data_type == 'longint':
+            return "vsc.int64_t()" if fld.is_signed else "vsc.uint64_t()"
+
+        # Default fallback
         return f"vsc.bit_t({fld.width})"
 
     def _generate_constraint(self, constraint: SVConstraint) -> List[str]:
