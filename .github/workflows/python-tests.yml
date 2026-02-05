@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -45,36 +45,36 @@ jobs:
 
     - name: Verify PyVSC imports and class definitions
       run: |
-        python - <<'PY'
-        import sys
-        try:
-            # Import the generated module to verify PyVSC compatibility
-            import vsc
-            exec(open('example_sv_classes.py').read())
-            print('PyVSC imports and class definitions OK')
-        except Exception as e:
-            print(f'PyVSC verification failed: {e}')
-            sys.exit(1)
-        PY
+        python -c "
+import sys
+try:
+    # Import the generated module to verify PyVSC compatibility
+    import vsc
+    exec(open('example_sv_classes.py').read())
+    print('PyVSC imports and class definitions OK')
+except Exception as e:
+    print(f'PyVSC verification failed: {e}')
+    sys.exit(1)
+"
 
     - name: Test PyVSC randomization (optional)
       continue-on-error: true
       run: |
-        python - <<'PY'
-        import vsc
-        exec(open('example_sv_classes.py').read())
+        python -c "
+import vsc
+exec(open('example_sv_classes.py').read())
 
-        # Try to instantiate and randomize the main class
-        try:
-            obj = IspRandItemSmall()
-            obj.randomize()
-            print('Randomization test PASSED')
-            print(f'  TestRandInt = {obj.TestRandInt}')
-            print(f'  TestRandNibble = {obj.TestRandNibble}')
-            print(f'  TestEnum = {obj.TestEnum}')
-        except Exception as e:
-            print(f'Randomization test failed (non-blocking): {e}')
-        PY
+# Try to instantiate and randomize the main class
+try:
+    obj = IspRandItemSmall()
+    obj.randomize()
+    print('Randomization test PASSED')
+    print(f'  TestRandInt = {obj.TestRandInt}')
+    print(f'  TestRandNibble = {obj.TestRandNibble}')
+    print(f'  TestEnum = {obj.TestEnum}')
+except Exception as e:
+    print(f'Randomization test failed (non-blocking): {e}')
+"
 
   lint:
     runs-on: ubuntu-latest
