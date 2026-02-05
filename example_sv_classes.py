@@ -111,7 +111,7 @@ class IspYuv2rgbCfg:
     def cr_chroma(self):
         with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
             (self.chroma_enabled == 1)
-        with vsc.implies((self.yuv_format.inside(vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420)))):
+        with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
             self.chroma_enabled in vsc.rangelist(0, 1)
 
     @vsc.constraint

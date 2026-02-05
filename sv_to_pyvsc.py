@@ -2309,7 +2309,7 @@ from typing import Optional'''
         return expr
 
     def _convert_inside_expression(self, expr: str) -> str:
-        """Convert 'var inside {values}' to 'var.inside(vsc.rangelist(values))'."""
+        """Convert 'var inside {values}' to 'var in vsc.rangelist(values)'."""
         # Pattern: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
 
@@ -2317,8 +2317,7 @@ from typing import Optional'''
             var_name = match.group(1)
             values_str = match.group(2)
             rangelist = self._translate_inside(values_str)
-            # Use .inside() so this can be embedded in expressions (eg. vsc.implies)
-            return f'{var_name}.inside(vsc.rangelist({rangelist}))'
+            return f'{var_name} in vsc.rangelist({rangelist})'
 
         return re.sub(pattern, replace_inside, expr)
 
