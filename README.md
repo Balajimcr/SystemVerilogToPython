@@ -182,11 +182,12 @@ self.mode = vsc.rand_enum_t(Mode)
 
 | SystemVerilog | Meaning | PyVSC Equivalent | Notes |
 |---------------|---------|------------------|-------|
-| `&&` | Logical AND | `&` | Required (do not use `and`) |
-| `\|\|` | Logical OR | `\|` | Required (do not use `or`) |
+| `&&` | Logical AND | `and` | Python boolean operator |
+| `\|\|` | Logical OR | `or` | Python boolean operator |
 | `!a` | Logical NOT | `~a` | Use parentheses for safety |
-| `!(a && b)` | NOT (AND) | `~(a & b)` | Exact semantic match |
-| `!(a \|\| b)` | NOT (OR) | `~(a \| b)` | Exact semantic match |
+| `/` | Integer Division | `//` | **Critical**: SV `/` is integer div |
+| `!(a && b)` | NOT (AND) | `~(a and b)` | Exact semantic match |
+| `!(a \|\| b)` | NOT (OR) | `~(a or b)` | Exact semantic match |
 
 ### 7. Constraint Constructs
 
@@ -196,15 +197,20 @@ self.mode = vsc.rand_enum_t(Mode)
 | `inside {[a:b]}` | `x in vsc.rangelist(vsc.rng(a, b))` |
 | `inside {v1, v2}` | `x in vsc.rangelist(v1, v2)` |
 | `!(x inside {...})` | `vsc.not_inside(x, vsc.rangelist(...))` |
+| `A -> B` | `with vsc.implies(A): B` (Simple expressions only) |
 | `if (c) {...}` | `with vsc.if_then(c): ...` |
 | `else if (c) {...}` | `with vsc.else_if(c): ...` |
 | `else {...}` | `with vsc.else_then: ...` |
 | `if (c) begin ... end` | `with vsc.if_then(c): ...` (multi-line) |
+| `if (x)` (bare var) | `with vsc.if_then(x != 0): ...` |
+| `if (~x)` (negated) | `with vsc.if_then(x == 0): ...` |
 | `dist {v := w}` | `vsc.dist(x, [vsc.weight(v, w)])` |
+| `dist {[a:b] :/ w}` | `vsc.dist(x, [vsc.weight(vsc.rng(a,b), w, 'range')])` |
 | `solve a before b` | `vsc.solve_order(a, b)` |
 | `unique {arr}` | `vsc.unique(arr)` |
 | `foreach (a[i]) {...}` | `with vsc.foreach(a, idx=True) as i: ...` |
 | `soft x == v` | `vsc.soft(x == v)` |
+| `arr.size() == N` | `arr.size == N` |
 | `var[7:0]` | `var[7:0]` (preserved) |
 
 ### 8. Quick Translation Checklist
@@ -216,7 +222,8 @@ self.mode = vsc.rand_enum_t(Mode)
 - ✅ Enums → Python `IntEnum` + `rand_enum_t`
 - ✅ Arrays → `rand_list_t(inner_type)`
 - ✅ Prefer standard widths (8/16/32/64) when possible
-- ✅ `&&` → `&`, `||` → `|`, `!` → `~`
+- ✅ `&&` → `and`, `||` → `or`, `!` → `~`
+- ✅ `a / b` → `a // b` (Integer division)
 
 ### Constraint Ordering
 
@@ -280,7 +287,7 @@ class AxiTransaction:
 ## Known Limitations
 
 1. **Complex nested conditionals** - May need restructuring
-2. **Implications** (`->`) - Not supported by the translator (must be manually converted)
+2. **Complex Implications** - `->` works for simple expressions; blocks `{}` require manual conversion
 3. **Enum references in distributions** - Need proper enum class prefix
 4. **Loop variables** in foreach - May get incorrect `self.` prefix
 

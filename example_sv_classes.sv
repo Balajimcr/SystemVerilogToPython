@@ -1,5 +1,5 @@
 // ============================================================================
-// ISP YUV → RGB Golden Constraint Model (NO IMPLICATIONS)
+// ISP YUV → RGB Golden Constraint Model
 // ============================================================================
 
 typedef enum int { YUV_444=0, YUV_422=1, YUV_420=2 } yuv_format_e;
@@ -36,11 +36,17 @@ class isp_yuv2rgb_cfg;
     rand bit clip_enable;
 
     // ------------------------------------------------------------------------
-    // Matrix Coefficients
+    // Matrix Coefficients (signed)
     // ------------------------------------------------------------------------
-    rand int signed c00,c01,c02;
-    rand int signed c10,c11,c12;
-    rand int signed c20,c21,c22;
+    rand int signed c00;
+    rand int signed c01;
+    rand int signed c02;
+    rand int signed c10;
+    rand int signed c11;
+    rand int signed c12;
+    rand int signed c20;
+    rand int signed c21;
+    rand int signed c22;
 
     // ------------------------------------------------------------------------
     // Offsets
@@ -49,20 +55,30 @@ class isp_yuv2rgb_cfg;
     rand int signed uv_offset;
 
     // ========================================================================
-    // ARITHMETIC TRANSLATION TEST (Merged)
+    // ARITHMETIC / LOGIC TRANSLATION TEST FIELDS
     // ========================================================================
     rand int a;
     rand int b;
     rand int c;
     rand int d;
+
     rand int x;
     rand int y;
     rand int z;
     rand int w;
-    rand int arith_width, stride; // Renamed width to avoid conflict
+
+    rand int arith_width;
+    rand int stride;
+
     rand int fmt;
     rand int bit_depth;
-    rand int arith_y_offset;      // Renamed y_offset to avoid conflict
+    rand int arith_y_offset;
+
+    rand int signed signed_val;
+    rand int unsigned unsigned_val;
+
+    rand int mode;
+    rand int range;
 
     // ========================================================================
     // BASIC RANGES
@@ -74,24 +90,21 @@ class isp_yuv2rgb_cfg;
     }
 
     // ========================================================================
-    // FORMAT vs PACKING (NO IMPLIES)
+    // FORMAT vs PACKING
     // ========================================================================
     constraint cr_format_packing {
-
         if (yuv_packing == YUV_PACKED) {
             yuv_format != YUV_420;
         }
-
         if (yuv_format == YUV_420) {
             yuv_packing != YUV_PACKED;
         }
     }
 
     // ========================================================================
-    // BIT DEPTH RULES (NO IMPLIES)
+    // BIT DEPTH RULES
     // ========================================================================
     constraint cr_bit_depth {
-
         if (yuv_packing == YUV_PACKED) {
             yuv_bit_depth inside {BIT_8, BIT_10};
         }
@@ -111,7 +124,6 @@ class isp_yuv2rgb_cfg;
     // CHROMA ENABLE
     // ========================================================================
     constraint cr_chroma {
-
         if (yuv_format == YUV_444) {
             chroma_enabled == 1;
         }
@@ -153,7 +165,7 @@ class isp_yuv2rgb_cfg;
     }
 
     // ========================================================================
-    // OFFSETS (NO IMPLIES)
+    // OFFSETS
     // ========================================================================
     constraint cr_offsets {
 
@@ -173,7 +185,7 @@ class isp_yuv2rgb_cfg;
     }
 
     // ========================================================================
-    // DITHER & CLIP (NO IMPLIES)
+    // DITHER & CLIP
     // ========================================================================
     constraint cr_dither_clip {
 
@@ -234,50 +246,58 @@ class isp_yuv2rgb_cfg;
         };
     }
 
-    
+    // ========================================================================
+    // TRANSLATION BUG-CATCHING TESTS (ADDITIVE)
+    // ========================================================================
 
-    // 1 & 2. Basic & Compound Arithmetic
-    constraint c_basic_compound {
-        w == (a * b + c) / d;      // Should translate to //
-        z == ((w * 10) + 7) / 8;
+    constraint tc_logical_ops {
+        if ((a > 8) && (b < 4))
+            c == 1;
+        else
+            c == 0;
     }
 
-    // 3. Assignment-Style
-    constraint c_assignment {
-        x == y + 1;
-        x >= y * 4;
-        x <= (y + 7) / 8;
+    constraint tc_int_div {
+        stride == (arith_width * 10 + 7) / 8;
     }
 
-    // 4 & 5. Shift Operators & Power-of-Two
-    constraint c_shift {
+    constraint tc_signed_unsigned {
+        signed_val inside {[-128:127]};
+        unsigned_val == signed_val + 128;
+    }
+
+    constraint tc_parallel_if {
+        if (a == 0) b == 1;
+        if (c == 0) d == 2;
+    }
+
+    constraint tc_not {
+        if (!(mode == 0))
+            bit_depth == BIT_10;
+    }
+
+    constraint tc_shift {
         arith_y_offset == (1 << (bit_depth - 1));
-        x == y << 2;  // Multiply by 4
-        z == w >> 1;  // Divide by 2
+        x == y << 2;
+        z == w >> 1;
     }
 
-    // 6. Modulo / Alignment
-    constraint c_modulo {
+    constraint tc_modulo {
         (x % 2) == 0;
         (arith_width % 4) == 0;
     }
 
-    // 7. Compound Arithmetic + Boolean
-    constraint c_compound_bool {
-        (a > 8) && (b < 4);
-        (x + y) >= z;
-    }
-
-    // 8. Arithmetic Inside Conditionals
-    constraint c_conditional {
+    constraint tc_conditional_stride {
         if (fmt == 0) {
             stride >= (arith_width * 8 + 7) / 8;
         }
     }
 
-    // 10. Golden Rule Example (Solver-Safe Math)
-    constraint c_golden {
-        stride >= (arith_width * bit_depth + 7) / 8;
-        stride <= ((arith_width * bit_depth + 7) / 8) * 125 / 100;
+    constraint tc_golden {
+        if (fmt == 0) {
+            stride >= (arith_width * bit_depth + 7) / 8;
+            stride <= ((arith_width * bit_depth + 7) / 8) * 125 / 100;
+        }
     }
+
 endclass

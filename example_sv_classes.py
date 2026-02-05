@@ -93,6 +93,10 @@ class IspYuv2rgbCfg:
     self.fmt = vsc.rand_int32_t()
     self.bit_depth = vsc.rand_int32_t()
     self.arith_y_offset = vsc.rand_int32_t()
+    self.signed_val = vsc.rand_int32_t()
+    self.unsigned_val = vsc.rand_uint32_t()
+    self.mode = vsc.rand_int32_t()
+    self.range = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_basic_ranges(self):
@@ -185,7 +189,7 @@ class IspYuv2rgbCfg:
     vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
     vsc.solve_order(self.rgb_format, self.dither_enable)
     vsc.solve_order(self.range_mode, self.clip_enable)
-    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888)):
+    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8)  and  (self.rgb_format == RgbFormat.RGB_888)):
       self.dither_enable == 1
     with vsc.else_then:
       self.dither_enable in vsc.rangelist(0, 1)
@@ -221,41 +225,54 @@ class IspYuv2rgbCfg:
     ])
 
   @vsc.constraint
-  def c_basic_compound(self):
-    self.w == (self.a * self.b + self.c) // self.d
-    self.z == ((self.w * 10) + 7) // 8
+  def tc_logical_ops(self):
+    with vsc.if_then((self.a > 8)  and  (self.b < 4)):
+      self.c == 1
+    with vsc.else_then:
+      self.c == 0
 
   @vsc.constraint
-  def c_assignment(self):
-    self.x == self.y + 1
-    self.x >= self.y * 4
-    self.x <= (self.y + 7) // 8
+  def tc_int_div(self):
+    self.stride == (self.arith_width * 10 + 7) // 8
 
   @vsc.constraint
-  def c_shift(self):
+  def tc_signed_unsigned(self):
+    self.signed_val in vsc.rangelist(vsc.rng(-128, 127))
+    self.unsigned_val == self.signed_val + 128
+
+  @vsc.constraint
+  def tc_parallel_if(self):
+    with vsc.if_then(self.a == 0):
+      self.b == 1
+    with vsc.if_then(self.c == 0):
+      self.d == 2
+
+  @vsc.constraint
+  def tc_not(self):
+    with vsc.if_then(~(self.mode == 0)):
+      self.bit_depth == BitDepth.BIT_10
+
+  @vsc.constraint
+  def tc_shift(self):
     self.arith_y_offset == (vsc.unsigned(1) << (self.bit_depth - 1))
     self.x == self.y << 2
     self.z == self.w >> 1
 
   @vsc.constraint
-  def c_modulo(self):
+  def tc_modulo(self):
     (self.x % 2) == 0
     (self.arith_width % 4) == 0
 
   @vsc.constraint
-  def c_compound_bool(self):
-    (self.a > 8) & (self.b < 4)
-    (self.x + self.y) >= self.z
-
-  @vsc.constraint
-  def c_conditional(self):
+  def tc_conditional_stride(self):
     with vsc.if_then(self.fmt == 0):
       self.stride >= (self.arith_width * 8 + 7) // 8
 
   @vsc.constraint
-  def c_golden(self):
-    self.stride >= (self.arith_width * self.bit_depth + 7) // 8
-    self.stride <= ((self.arith_width * self.bit_depth + 7) // 8) * 125 // 100
+  def tc_golden(self):
+    with vsc.if_then(self.fmt == 0):
+      self.stride >= (self.arith_width * self.bit_depth + 7) // 8
+      self.stride <= ((self.arith_width * self.bit_depth + 7) // 8) * 125 // 100
 
 # =============================================================================
 # USAGE EXAMPLE

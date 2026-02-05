@@ -2252,15 +2252,15 @@ from typing import Optional'''
         """Convert SystemVerilog logical operators to PyVSC equivalents.
 
         Conversions:
-        - && -> &
-        - || -> |
+        - && -> and
+        - || -> or
         - !expr -> ~expr
-        - !(a && b) -> ~(a & b)
-        - !(a || b) -> ~(a | b)
+        - !(a && b) -> ~(a and b)
+        - !(a || b) -> ~(a or b)
         """
-        # First convert && to & and || to |
-        expr = re.sub(r'&&', '&', expr)
-        expr = re.sub(r'\|\|', '|', expr)
+        # First convert && to and and || to or
+        expr = re.sub(r'&&', ' and ', expr)
+        expr = re.sub(r'\|\|', ' or ', expr)
 
         # Convert ! to ~ for logical NOT
         # Handle !( patterns first (negation of grouped expressions)
@@ -2274,7 +2274,13 @@ from typing import Optional'''
 
     @staticmethod
     def _convert_literal_shifts(expr: str) -> str:
-        """Wrap numeric literals used as shift LHS with vsc.unsigned()."""
+        """Wrap numeric literals used as shift LHS with vsc.unsigned().
+
+        PyVSC requires the left operand of << or >> to be a vsc type,
+        not a plain Python int. This wraps bare numeric literals like
+        1 << x  ->  vsc.unsigned(1) << x
+        16 << x ->  vsc.unsigned(16) << x
+        """
         pattern = r'(^|[\s\(\[\{=,:!~&|^<>+\-*/%])((?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+))\s*(<<|>>)'
 
         def repl(match):
