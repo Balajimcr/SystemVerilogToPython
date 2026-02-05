@@ -89,29 +89,27 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_format_packing(self):
-    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
-      (self.yuv_format != YuvFormat.YUV_420)
-    with vsc.implies((self.yuv_format  == YuvFormat.YUV_420)):
-      (self.yuv_packing != YuvPacking.YUV_PACKED)
-    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PLANAR)):
-      1
+    with vsc.if_then(self.yuv_packing == YuvPacking.YUV_PACKED):
+      self.yuv_format != YuvFormat.YUV_420
+    with vsc.if_then(self.yuv_format == YuvFormat.YUV_420):
+      self.yuv_packing != YuvPacking.YUV_PACKED
 
   @vsc.constraint
   def cr_bit_depth(self):
-    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
+    with vsc.if_then(self.yuv_packing == YuvPacking.YUV_PACKED):
       self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10)
-    with vsc.implies((self.rgb_format == RgbFormat.RGB_888)):
-      (self.yuv_bit_depth == BitDepth.BIT_8)
-    with vsc.implies((self.rgb_format == RgbFormat.RGB_101010)):
+    with vsc.if_then(self.rgb_format == RgbFormat.RGB_888):
+      self.yuv_bit_depth == BitDepth.BIT_8
+    with vsc.else_if(self.rgb_format == RgbFormat.RGB_101010):
       self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
-    with vsc.implies((self.rgb_format == RgbFormat.RGB_121212)):
-      (self.yuv_bit_depth == BitDepth.BIT_12)
+    with vsc.else_then:
+      self.yuv_bit_depth == BitDepth.BIT_12
 
   @vsc.constraint
   def cr_chroma(self):
-    with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
-      (self.chroma_enabled == 1)
-    with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
+    with vsc.if_then(self.yuv_format == YuvFormat.YUV_444):
+      self.chroma_enabled == 1
+    with vsc.else_then:
       self.chroma_enabled in vsc.rangelist(0, 1)
 
   @vsc.constraint
@@ -126,35 +124,35 @@ class IspYuv2rgbCfg:
     vsc.solve_order(self.color_space, self.c21)
     vsc.solve_order(self.color_space, self.c22)
     with vsc.if_then(self.color_space == ColorSpace.CS_BT601):
-      self.c00 ==  298
-      self.c01 ==    0
-      self.c02 ==  409
-      self.c10 ==  298
-      self.c11 == -100
-      self.c12 == -208
-      self.c20 ==  298
-      self.c21 ==  516
-      self.c22 ==    0
+      self.c00==298
+      self.c01==0
+      self.c02==409
+      self.c10==298
+      self.c11==-100
+      self.c12==-208
+      self.c20==298
+      self.c21==516
+      self.c22==0
     with vsc.else_if(self.color_space == ColorSpace.CS_BT709):
-      self.c00 ==  298
-      self.c01 ==    0
-      self.c02 ==  459
-      self.c10 ==  298
-      self.c11 ==  -55
-      self.c12 == -136
-      self.c20 ==  298
-      self.c21 ==  541
-      self.c22 ==    0
+      self.c00==298
+      self.c01==0
+      self.c02==459
+      self.c10==298
+      self.c11==-55
+      self.c12==-136
+      self.c20==298
+      self.c21==541
+      self.c22==0
     with vsc.else_then:
-      self.c00 ==  298
-      self.c01 ==    0
-      self.c02 ==  483
-      self.c10 ==  298
-      self.c11 ==  -57
-      self.c12 == -157
-      self.c20 ==  298
-      self.c21 ==  565
-      self.c22 ==    0
+      self.c00==298
+      self.c01==0
+      self.c02==483
+      self.c10==298
+      self.c11==-57
+      self.c12==-157
+      self.c20==298
+      self.c21==565
+      self.c22==0
 
   @vsc.constraint
   def cr_offsets(self):
@@ -174,21 +172,22 @@ class IspYuv2rgbCfg:
     vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
     vsc.solve_order(self.rgb_format, self.dither_enable)
     vsc.solve_order(self.range_mode, self.clip_enable)
-    with vsc.implies(((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
-      (self.dither_enable == 1)
-    with vsc.implies(~((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
+    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888)):
+      self.dither_enable == 1
+    with vsc.else_then:
       self.dither_enable in vsc.rangelist(0, 1)
-    with vsc.implies((self.range_mode == RangeMode.LIMITED_RANGE)):
-      (self.clip_enable == 1)
+    with vsc.if_then(self.range_mode == RangeMode.LIMITED_RANGE):
+      self.clip_enable == 1
 
   @vsc.constraint
   def cr_dimension_alignment(self):
     vsc.solve_order(self.yuv_format, self.width)
     vsc.solve_order(self.yuv_format, self.height)
-    with vsc.implies((self.yuv_format == YuvFormat.YUV_420)):
-      ((self.width % 2 == 0) & (self.height % 2 == 0))
-    with vsc.implies((self.yuv_format == YuvFormat.YUV_422)):
-      (self.width % 2 == 0)
+    with vsc.if_then(self.yuv_format == YuvFormat.YUV_420):
+      (self.width  % 2) == 0
+      (self.height % 2) == 0
+    with vsc.else_if(self.yuv_format == YuvFormat.YUV_422):
+      (self.width % 2) == 0
 
   @vsc.constraint
   def cr_distributions(self):

@@ -1,67 +1,13 @@
 // ============================================================================
-// ISP YUV → RGB Golden Constraint Model
-// ----------------------------------------------------------------------------
-// Purpose:
-//   - Canonical SystemVerilog example for YUV→RGB conversion configuration
-//   - Exhaustively models formats, packing, bit-depths, and color standards
-//   - Designed for clean SV → pyvsc translation
-//
-// NOTES:
-//   - NOT synthesizable RTL
-//   - Constraint-driven architectural / stimulus model
-//   - All solve-order statements are written LAST (golden rule)
-//
+// ISP YUV → RGB Golden Constraint Model (NO IMPLICATIONS)
 // ============================================================================
 
-// ============================================================================
-// ENUMERATIONS
-// ============================================================================
-
-// -------------------- YUV Format --------------------
-typedef enum int {
-    YUV_444 = 0,
-    YUV_422 = 1,
-    YUV_420 = 2
-} yuv_format_e;
-
-// -------------------- YUV Packing --------------------
-typedef enum int {
-    YUV_PLANAR = 0,
-    YUV_SEMI_PLANAR,
-    YUV_PACKED
-} yuv_packing_e;
-
-// -------------------- Color Space --------------------
-typedef enum int {
-    CS_BT601 = 0,
-    CS_BT709,
-    CS_BT2020
-} color_space_e;
-
-// -------------------- Bit Depth --------------------
-typedef enum int {
-    BIT_8  = 8,
-    BIT_10 = 10,
-    BIT_12 = 12
-} bit_depth_e;
-
-// -------------------- RGB Output --------------------
-typedef enum int {
-    RGB_888 = 0,
-    RGB_101010,
-    RGB_121212
-} rgb_format_e;
-
-// -------------------- Range Mode --------------------
-typedef enum int {
-    FULL_RANGE = 0,
-    LIMITED_RANGE
-} range_mode_e;
-
-
-// ============================================================================
-// MAIN CONFIGURATION CLASS
-// ============================================================================
+typedef enum int { YUV_444=0, YUV_422=1, YUV_420=2 } yuv_format_e;
+typedef enum int { YUV_PLANAR=0, YUV_SEMI_PLANAR, YUV_PACKED } yuv_packing_e;
+typedef enum int { CS_BT601=0, CS_BT709, CS_BT2020 } color_space_e;
+typedef enum int { BIT_8=8, BIT_10=10, BIT_12=12 } bit_depth_e;
+typedef enum int { RGB_888=0, RGB_101010, RGB_121212 } rgb_format_e;
+typedef enum int { FULL_RANGE=0, LIMITED_RANGE } range_mode_e;
 
 class isp_yuv2rgb_cfg;
 
@@ -79,33 +25,32 @@ class isp_yuv2rgb_cfg;
     // ------------------------------------------------------------------------
     // Frame Geometry
     // ------------------------------------------------------------------------
-    rand int unsigned        width;
-    rand int unsigned        height;
+    rand int unsigned width;
+    rand int unsigned height;
 
     // ------------------------------------------------------------------------
     // Feature Enables
     // ------------------------------------------------------------------------
-    rand bit                 chroma_enabled;
-    rand bit                 dither_enable;
-    rand bit                 clip_enable;
+    rand bit chroma_enabled;
+    rand bit dither_enable;
+    rand bit clip_enable;
 
     // ------------------------------------------------------------------------
-    // YUV → RGB Matrix (signed fixed-point)
+    // Matrix Coefficients
     // ------------------------------------------------------------------------
-    rand int signed          c00, c01, c02;
-    rand int signed          c10, c11, c12;
-    rand int signed          c20, c21, c22;
+    rand int signed c00,c01,c02;
+    rand int signed c10,c11,c12;
+    rand int signed c20,c21,c22;
 
     // ------------------------------------------------------------------------
     // Offsets
     // ------------------------------------------------------------------------
-    rand int signed          y_offset;
-    rand int signed          uv_offset;
+    rand int signed y_offset;
+    rand int signed uv_offset;
 
     // ========================================================================
     // BASIC RANGES
     // ========================================================================
-
     constraint cr_basic_ranges {
         enable inside {0,1};
         width  inside {[64:8192]};
@@ -113,66 +58,73 @@ class isp_yuv2rgb_cfg;
     }
 
     // ========================================================================
-    // FORMAT vs PACKING RULES
+    // FORMAT vs PACKING (NO IMPLIES)
     // ========================================================================
-
     constraint cr_format_packing {
 
-        (yuv_packing == YUV_PACKED) -> (yuv_format != YUV_420);
-        (yuv_format  == YUV_420)    -> (yuv_packing != YUV_PACKED);
-        (yuv_packing == YUV_PLANAR) -> 1;
+        if (yuv_packing == YUV_PACKED) {
+            yuv_format != YUV_420;
+        }
+
+        if (yuv_format == YUV_420) {
+            yuv_packing != YUV_PACKED;
+        }
     }
 
     // ========================================================================
-    // BIT DEPTH RULES
+    // BIT DEPTH RULES (NO IMPLIES)
     // ========================================================================
-
     constraint cr_bit_depth {
 
-        (yuv_packing == YUV_PACKED) ->
-            (yuv_bit_depth inside {BIT_8, BIT_10});
+        if (yuv_packing == YUV_PACKED) {
+            yuv_bit_depth inside {BIT_8, BIT_10};
+        }
 
-        (rgb_format == RGB_888)    -> (yuv_bit_depth == BIT_8);
-        (rgb_format == RGB_101010) -> (yuv_bit_depth inside {BIT_10, BIT_12});
-        (rgb_format == RGB_121212) -> (yuv_bit_depth == BIT_12);
+        if (rgb_format == RGB_888) {
+            yuv_bit_depth == BIT_8;
+        }
+        else if (rgb_format == RGB_101010) {
+            yuv_bit_depth inside {BIT_10, BIT_12};
+        }
+        else {
+            yuv_bit_depth == BIT_12;
+        }
     }
 
     // ========================================================================
-    // CHROMA ENABLE LOGIC
+    // CHROMA ENABLE
     // ========================================================================
-
     constraint cr_chroma {
 
-        (yuv_format == YUV_444) ->
-            (chroma_enabled == 1);
-
-        (yuv_format inside {YUV_422, YUV_420}) ->
-            (chroma_enabled inside {0,1});
+        if (yuv_format == YUV_444) {
+            chroma_enabled == 1;
+        }
+        else {
+            chroma_enabled inside {0,1};
+        }
     }
 
     // ========================================================================
-    // COLOR SPACE → MATRIX COEFFICIENTS
+    // COLOR MATRIX
     // ========================================================================
-
     constraint cr_color_matrix {
 
         if (color_space == CS_BT601) {
-            c00 ==  298;  c01 ==    0;  c02 ==  409;
-            c10 ==  298;  c11 == -100;  c12 == -208;
-            c20 ==  298;  c21 ==  516;  c22 ==    0;
+            c00==298; c01==0;   c02==409;
+            c10==298; c11==-100;c12==-208;
+            c20==298; c21==516; c22==0;
         }
         else if (color_space == CS_BT709) {
-            c00 ==  298;  c01 ==    0;  c02 ==  459;
-            c10 ==  298;  c11 ==  -55;  c12 == -136;
-            c20 ==  298;  c21 ==  541;  c22 ==    0;
+            c00==298; c01==0;   c02==459;
+            c10==298; c11==-55; c12==-136;
+            c20==298; c21==541; c22==0;
         }
         else {
-            c00 ==  298;  c01 ==    0;  c02 ==  483;
-            c10 ==  298;  c11 ==  -57;  c12 == -157;
-            c20 ==  298;  c21 ==  565;  c22 ==    0;
+            c00==298; c01==0;   c02==483;
+            c10==298; c11==-57; c12==-157;
+            c20==298; c21==565; c22==0;
         }
 
-        // ---- SOLVE ORDER (LAST) ----
         solve color_space before c00;
         solve color_space before c01;
         solve color_space before c02;
@@ -185,9 +137,8 @@ class isp_yuv2rgb_cfg;
     }
 
     // ========================================================================
-    // OFFSET SELECTION
+    // OFFSETS (NO IMPLIES)
     // ========================================================================
-
     constraint cr_offsets {
 
         if (range_mode == FULL_RANGE) {
@@ -199,55 +150,53 @@ class isp_yuv2rgb_cfg;
             uv_offset == (128 << (yuv_bit_depth-8));
         }
 
-        // ---- SOLVE ORDER ----
-        solve range_mode    before y_offset;
-        solve range_mode    before uv_offset;
+        solve range_mode before y_offset;
+        solve range_mode before uv_offset;
         solve yuv_bit_depth before y_offset;
         solve yuv_bit_depth before uv_offset;
     }
 
     // ========================================================================
-    // DITHERING & CLIPPING
+    // DITHER & CLIP (NO IMPLIES)
     // ========================================================================
-
     constraint cr_dither_clip {
 
-        ((yuv_bit_depth > BIT_8) && (rgb_format == RGB_888))
-            -> (dither_enable == 1);
+        if ((yuv_bit_depth > BIT_8) && (rgb_format == RGB_888)) {
+            dither_enable == 1;
+        }
+        else {
+            dither_enable inside {0,1};
+        }
 
-        !((yuv_bit_depth > BIT_8) && (rgb_format == RGB_888))
-            -> (dither_enable inside {0,1});
+        if (range_mode == LIMITED_RANGE) {
+            clip_enable == 1;
+        }
 
-        (range_mode == LIMITED_RANGE) ->
-            (clip_enable == 1);
-
-        // ---- SOLVE ORDER ----
         solve yuv_bit_depth before dither_enable;
         solve rgb_format    before dither_enable;
         solve range_mode    before clip_enable;
     }
 
     // ========================================================================
-    // DIMENSION ALIGNMENT (SUBSAMPLING)
+    // DIMENSION ALIGNMENT
     // ========================================================================
-
     constraint cr_dimension_alignment {
 
-        (yuv_format == YUV_420) ->
-            ((width % 2 == 0) && (height % 2 == 0));
+        if (yuv_format == YUV_420) {
+            (width  % 2) == 0;
+            (height % 2) == 0;
+        }
+        else if (yuv_format == YUV_422) {
+            (width % 2) == 0;
+        }
 
-        (yuv_format == YUV_422) ->
-            (width % 2 == 0);
-
-        // ---- SOLVE ORDER ----
         solve yuv_format before width;
         solve yuv_format before height;
     }
 
     // ========================================================================
-    // REALISTIC DISTRIBUTIONS
+    // DISTRIBUTIONS
     // ========================================================================
-
     constraint cr_distributions {
 
         yuv_format dist {
