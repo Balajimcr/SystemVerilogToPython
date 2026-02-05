@@ -249,7 +249,7 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def tc_not(self):
-    with vsc.if_then(~(self.mode == 0)):
+    with vsc.if_then(not (self.mode == 0)):
       self.bit_depth == BitDepth.BIT_10
 
   @vsc.constraint

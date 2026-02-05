@@ -2254,21 +2254,21 @@ from typing import Optional'''
         Conversions:
         - && -> and
         - || -> or
-        - !expr -> ~expr
-        - !(a && b) -> ~(a and b)
-        - !(a || b) -> ~(a or b)
+        - !expr -> not expr
+        - !(a && b) -> not (a and b)
+        - !(a || b) -> not (a or b)
         """
         # First convert && to and and || to or
         expr = re.sub(r'&&', ' and ', expr)
         expr = re.sub(r'\|\|', ' or ', expr)
 
-        # Convert ! to ~ for logical NOT
+        # Convert ! to not for logical NOT
         # Handle !( patterns first (negation of grouped expressions)
-        expr = re.sub(r'!\s*\(', '~(', expr)
+        expr = re.sub(r'!\s*\(', 'not (', expr)
 
         # Handle !var patterns (negation of single variables)
         # But don't convert != (not equal)
-        expr = re.sub(r'!(?!=)(\w)', r'~\1', expr)
+        expr = re.sub(r'!(?!=)(\w)', r'not \1', expr)
 
         return expr
 
@@ -2324,7 +2324,7 @@ from typing import Optional'''
 
         PyVSC doesn't support True/False or bare variables in conditions.
         Convert: self.var -> (self.var != 0)
-        Convert: ~self.var -> (self.var == 0)
+        Convert: not self.var -> (self.var == 0)
         """
         # Don't convert if it already has a comparison operator
         if any(op in expr for op in ['==', '!=', '<', '>', '<=', '>=']):
@@ -2338,8 +2338,8 @@ from typing import Optional'''
         if ' in vsc.rangelist' in expr:
             return expr
 
-        # Handle '~self.var' -> '(self.var == 0)'
-        not_match = re.match(r'^~\s*(self\.\w+)$', expr.strip())
+        # Handle 'not self.var' -> '(self.var == 0)'
+        not_match = re.match(r'^not\s+(self\.\w+)$', expr.strip())
         if not_match:
             return f'({not_match.group(1)} == 0)'
 
