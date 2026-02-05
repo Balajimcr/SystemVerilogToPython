@@ -2103,6 +2103,7 @@ from typing import Optional'''
             return ""
 
         expr = self._convert_numbers(expr)
+        expr = self._convert_literal_shifts(expr)
         expr = self._convert_logical_operators(expr)
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
@@ -2134,6 +2135,17 @@ from typing import Optional'''
         expr = re.sub(r'!(?!=)(\w)', r'~\1', expr)
 
         return expr
+
+    @staticmethod
+    def _convert_literal_shifts(expr: str) -> str:
+        """Wrap numeric literals used as shift LHS with vsc.unsigned()."""
+        pattern = r'(^|[\s\(\[\{=,:!~&|^<>+\-*/%])((?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+))\s*(<<|>>)'
+
+        def repl(match):
+            prefix, literal, op = match.groups()
+            return f"{prefix}vsc.unsigned({literal}) {op}"
+
+        return re.sub(pattern, repl, expr)
 
     def _qualify_enum_values(self, expr: str) -> str:
         """Qualify enum value literals with their enum class name."""
@@ -2183,7 +2195,7 @@ from typing import Optional'''
         return expr
 
     def _convert_inside_expression(self, expr: str) -> str:
-        """Convert 'var inside {values}' to 'var in vsc.rangelist(values)'."""
+        """Convert 'var inside {values}' to 'var.inside(vsc.rangelist(values))'."""
         # Pattern: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
 
@@ -2191,7 +2203,8 @@ from typing import Optional'''
             var_name = match.group(1)
             values_str = match.group(2)
             rangelist = self._translate_inside(values_str)
-            return f'{var_name} in vsc.rangelist({rangelist})'
+            # Use .inside() so this can be embedded in expressions (eg. vsc.implies)
+            return f'{var_name}.inside(vsc.rangelist({rangelist}))'
 
         return re.sub(pattern, replace_inside, expr)
 
@@ -2245,11 +2258,11 @@ from typing import Optional'''
             item = item.strip()
             range_match = re.match(r'\[(.+?):(.+?)\]', item)
             if range_match:
-                low = self._convert_numbers(range_match.group(1).strip())
-                high = self._convert_numbers(range_match.group(2).strip())
+                low = self._qualify_enum_values(self._convert_numbers(range_match.group(1).strip()))
+                high = self._qualify_enum_values(self._convert_numbers(range_match.group(2).strip()))
                 parts.append(f"vsc.rng({low}, {high})")
             else:
-                parts.append(self._convert_numbers(item))
+                parts.append(self._qualify_enum_values(self._convert_numbers(item)))
         return ', '.join(parts)
 
     @staticmethod
@@ -2290,12 +2303,12 @@ from typing import Optional'''
                     rng_match = re.match(r'\[(.+?):(.+?)\]', val_part.strip())
 
                     if rng_match:
-                        low = self._convert_numbers(rng_match.group(1).strip())
-                        high = self._convert_numbers(rng_match.group(2).strip())
+                        low = self._qualify_enum_values(self._convert_numbers(rng_match.group(1).strip()))
+                        high = self._qualify_enum_values(self._convert_numbers(rng_match.group(2).strip()))
                         range_arg = ", 'range'" if range_mode else ""
                         weights.append(f"vsc.weight(vsc.rng({low}, {high}), {weight}{range_arg})")
                     else:
-                        val = self._convert_numbers(val_part.strip())
+                        val = self._qualify_enum_values(self._convert_numbers(val_part.strip()))
                         weights.append(f"vsc.weight({val}, {weight})")
                     break
 

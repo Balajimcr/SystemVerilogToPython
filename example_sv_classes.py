@@ -99,11 +99,11 @@ class IspYuv2rgbCfg:
     @vsc.constraint
     def cr_bit_depth(self):
         with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
-            self.yuv_bit_depth in vsc.rangelist(BIT_8, BIT_10)
+            self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10)
         with vsc.implies((self.rgb_format == RgbFormat.RGB_888)):
             (self.yuv_bit_depth == BitDepth.BIT_8)
         with vsc.implies((self.rgb_format == RgbFormat.RGB_101010)):
-            self.yuv_bit_depth in vsc.rangelist(BIT_10, BIT_12)
+            self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
         with vsc.implies((self.rgb_format == RgbFormat.RGB_121212)):
             (self.yuv_bit_depth == BitDepth.BIT_12)
 
@@ -111,7 +111,7 @@ class IspYuv2rgbCfg:
     def cr_chroma(self):
         with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
             (self.chroma_enabled == 1)
-        with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
+        with vsc.implies((self.yuv_format.inside(vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420)))):
             self.chroma_enabled in vsc.rangelist(0, 1)
 
     @vsc.constraint
@@ -164,10 +164,10 @@ class IspYuv2rgbCfg:
         vsc.solve_order(self.yuv_bit_depth, self.uv_offset)
         with vsc.if_then(self.range_mode == RangeMode.FULL_RANGE):
             self.y_offset  == 0
-            self.uv_offset == (1 << (self.yuv_bit_depth-1))
+            self.uv_offset == (vsc.unsigned(1) << (self.yuv_bit_depth-1))
         with vsc.else_then:
-            self.y_offset  == (16  << (self.yuv_bit_depth-8))
-            self.uv_offset == (128 << (self.yuv_bit_depth-8))
+            self.y_offset  == (vsc.unsigned(16) << (self.yuv_bit_depth-8))
+            self.uv_offset == (vsc.unsigned(128) << (self.yuv_bit_depth-8))
 
     @vsc.constraint
     def cr_dither_clip(self):
@@ -193,19 +193,19 @@ class IspYuv2rgbCfg:
     @vsc.constraint
     def cr_distributions(self):
         vsc.dist(self.yuv_format, [
-            vsc.weight(YUV_444, 20),
-            vsc.weight(YUV_422, 50),
-            vsc.weight(YUV_420, 30),
+            vsc.weight(YuvFormat.YUV_444, 20),
+            vsc.weight(YuvFormat.YUV_422, 50),
+            vsc.weight(YuvFormat.YUV_420, 30),
         ])
         vsc.dist(self.yuv_bit_depth, [
-            vsc.weight(BIT_8, 60),
-            vsc.weight(BIT_10, 30),
-            vsc.weight(BIT_12, 10),
+            vsc.weight(BitDepth.BIT_8, 60),
+            vsc.weight(BitDepth.BIT_10, 30),
+            vsc.weight(BitDepth.BIT_12, 10),
         ])
         vsc.dist(self.color_space, [
-            vsc.weight(CS_BT601, 40),
-            vsc.weight(CS_BT709, 40),
-            vsc.weight(CS_BT2020, 20),
+            vsc.weight(ColorSpace.CS_BT601, 40),
+            vsc.weight(ColorSpace.CS_BT709, 40),
+            vsc.weight(ColorSpace.CS_BT2020, 20),
         ])
 
 # =============================================================================
