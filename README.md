@@ -18,7 +18,6 @@ This is a **Translation Assistant**, not an automated converter. The generated c
   - `rand`/`randc` fields with proper type mapping
   - `inside` range constraints → `vsc.rangelist()`
   - Range constraints (`var >= min && var <= max`) → grouped into `parameter_range` constraint
-  - Implications (`->`) → `with vsc.implies():`
   - Conditional constraints (`if/else/begin/end`) → `vsc.if_then/else_if/else_then`
   - Weighted distributions (`dist`) → `vsc.dist()`
   - Solve order (`solve before`) → `vsc.solve_order()` (placed first in constraints)
@@ -197,7 +196,6 @@ self.mode = vsc.rand_enum_t(Mode)
 | `inside {[a:b]}` | `x in vsc.rangelist(vsc.rng(a, b))` |
 | `inside {v1, v2}` | `x in vsc.rangelist(v1, v2)` |
 | `!(x inside {...})` | `vsc.not_inside(x, vsc.rangelist(...))` |
-| `A -> B` | `with vsc.implies(A): B` |
 | `if (c) {...}` | `with vsc.if_then(c): ...` |
 | `else if (c) {...}` | `with vsc.else_if(c): ...` |
 | `else {...}` | `with vsc.else_then: ...` |
@@ -282,7 +280,7 @@ class AxiTransaction:
 ## Known Limitations
 
 1. **Complex nested conditionals** - May need restructuring
-2. **Bidirectional implications** (`<->`) - Requires two `vsc.implies()` calls
+2. **Implications** (`->`) - Not supported by the translator (must be manually converted)
 3. **Enum references in distributions** - Need proper enum class prefix
 4. **Loop variables** in foreach - May get incorrect `self.` prefix
 
