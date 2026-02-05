@@ -657,7 +657,10 @@ class PyVSCGenerator:
         code_parts.append(self._generate_usage_example(sv_classes))
         
         final_code = '\n\n'.join(filter(None, code_parts))
-        
+
+        # Post-process: convert 4-space indentation to 2-space
+        final_code = self._reduce_indentation(final_code)
+
         # Analyze output Python code for metrics
         self._analyze_py_output(final_code)
         
@@ -848,6 +851,24 @@ class PyVSCGenerator:
                                 issues.append(f"Constraint '{constraint.name}': variable '{ident}' may be missing from translated code")
         
         return issues
+
+    @staticmethod
+    def _reduce_indentation(code: str) -> str:
+        """Convert 4-space indentation to 2-space indentation."""
+        result_lines = []
+        for line in code.split('\n'):
+            if not line or not line.startswith(' '):
+                result_lines.append(line)
+                continue
+            # Count leading spaces
+            stripped = line.lstrip(' ')
+            num_spaces = len(line) - len(stripped)
+            # Convert: every 4 spaces becomes 2 spaces
+            indent_level = num_spaces // 4
+            remainder = num_spaces % 4
+            new_indent = '  ' * indent_level + ' ' * remainder
+            result_lines.append(new_indent + stripped)
+        return '\n'.join(result_lines)
 
     def _check_sv_syntax_leaks(self, code: str) -> List[str]:
         """Check for SystemVerilog syntax that leaked into Python code."""

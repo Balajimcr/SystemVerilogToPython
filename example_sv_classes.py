@@ -18,218 +18,218 @@ import random
 from typing import Optional
 
 class YuvFormat(IntEnum):
-    """Translated from SV enum: yuv_format_e"""
-    YUV_444 = 0
-    YUV_422 = 1
-    YUV_420 = 2
+  """Translated from SV enum: yuv_format_e"""
+  YUV_444 = 0
+  YUV_422 = 1
+  YUV_420 = 2
 
 class YuvPacking(IntEnum):
-    """Translated from SV enum: yuv_packing_e"""
-    YUV_PLANAR = 0
-    YUV_SEMI_PLANAR = 1
-    YUV_PACKED = 2
+  """Translated from SV enum: yuv_packing_e"""
+  YUV_PLANAR = 0
+  YUV_SEMI_PLANAR = 1
+  YUV_PACKED = 2
 
 class ColorSpace(IntEnum):
-    """Translated from SV enum: color_space_e"""
-    CS_BT601 = 0
-    CS_BT709 = 1
-    CS_BT2020 = 2
+  """Translated from SV enum: color_space_e"""
+  CS_BT601 = 0
+  CS_BT709 = 1
+  CS_BT2020 = 2
 
 class BitDepth(IntEnum):
-    """Translated from SV enum: bit_depth_e"""
-    BIT_8 = 8
-    BIT_10 = 10
-    BIT_12 = 12
+  """Translated from SV enum: bit_depth_e"""
+  BIT_8 = 8
+  BIT_10 = 10
+  BIT_12 = 12
 
 class RgbFormat(IntEnum):
-    """Translated from SV enum: rgb_format_e"""
-    RGB_888 = 0
-    RGB_101010 = 1
-    RGB_121212 = 2
+  """Translated from SV enum: rgb_format_e"""
+  RGB_888 = 0
+  RGB_101010 = 1
+  RGB_121212 = 2
 
 class RangeMode(IntEnum):
-    """Translated from SV enum: range_mode_e"""
-    FULL_RANGE = 0
-    LIMITED_RANGE = 1
+  """Translated from SV enum: range_mode_e"""
+  FULL_RANGE = 0
+  LIMITED_RANGE = 1
 
 @vsc.randobj
 class IspYuv2rgbCfg:
-    """Translated from SV class: isp_yuv2rgb_cfg"""
+  """Translated from SV class: isp_yuv2rgb_cfg"""
 
-    def __init__(self):
-        self.enable = vsc.rand_bit_t(1)
-        self.yuv_format = vsc.rand_int32_t()
-        self.yuv_packing = vsc.rand_int32_t()
-        self.yuv_bit_depth = vsc.rand_int32_t()
-        self.color_space = vsc.rand_int32_t()
-        self.range_mode = vsc.rand_int32_t()
-        self.rgb_format = vsc.rand_int32_t()
-        self.width = vsc.rand_uint32_t()
-        self.height = vsc.rand_uint32_t()
-        self.chroma_enabled = vsc.rand_bit_t(1)
-        self.dither_enable = vsc.rand_bit_t(1)
-        self.clip_enable = vsc.rand_bit_t(1)
-        self.c00 = vsc.rand_int32_t()
-        self.c01 = vsc.rand_int32_t()
-        self.c02 = vsc.rand_int32_t()
-        self.c10 = vsc.rand_int32_t()
-        self.c11 = vsc.rand_int32_t()
-        self.c12 = vsc.rand_int32_t()
-        self.c20 = vsc.rand_int32_t()
-        self.c21 = vsc.rand_int32_t()
-        self.c22 = vsc.rand_int32_t()
-        self.y_offset = vsc.rand_int32_t()
-        self.uv_offset = vsc.rand_int32_t()
+  def __init__(self):
+    self.enable = vsc.rand_bit_t(1)
+    self.yuv_format = vsc.rand_int32_t()
+    self.yuv_packing = vsc.rand_int32_t()
+    self.yuv_bit_depth = vsc.rand_int32_t()
+    self.color_space = vsc.rand_int32_t()
+    self.range_mode = vsc.rand_int32_t()
+    self.rgb_format = vsc.rand_int32_t()
+    self.width = vsc.rand_uint32_t()
+    self.height = vsc.rand_uint32_t()
+    self.chroma_enabled = vsc.rand_bit_t(1)
+    self.dither_enable = vsc.rand_bit_t(1)
+    self.clip_enable = vsc.rand_bit_t(1)
+    self.c00 = vsc.rand_int32_t()
+    self.c01 = vsc.rand_int32_t()
+    self.c02 = vsc.rand_int32_t()
+    self.c10 = vsc.rand_int32_t()
+    self.c11 = vsc.rand_int32_t()
+    self.c12 = vsc.rand_int32_t()
+    self.c20 = vsc.rand_int32_t()
+    self.c21 = vsc.rand_int32_t()
+    self.c22 = vsc.rand_int32_t()
+    self.y_offset = vsc.rand_int32_t()
+    self.uv_offset = vsc.rand_int32_t()
 
-    @vsc.constraint
-    def cr_basic_ranges(self):
-        self.enable in vsc.rangelist(0, 1)
-        self.width in vsc.rangelist(vsc.rng(64, 8192))
-        self.height in vsc.rangelist(vsc.rng(64, 8192))
+  @vsc.constraint
+  def cr_basic_ranges(self):
+    self.enable in vsc.rangelist(0, 1)
+    self.width in vsc.rangelist(vsc.rng(64, 8192))
+    self.height in vsc.rangelist(vsc.rng(64, 8192))
 
-    @vsc.constraint
-    def cr_format_packing(self):
-        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
-            (self.yuv_format != YuvFormat.YUV_420)
-        with vsc.implies((self.yuv_format  == YuvFormat.YUV_420)):
-            (self.yuv_packing != YuvPacking.YUV_PACKED)
-        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PLANAR)):
-            1
+  @vsc.constraint
+  def cr_format_packing(self):
+    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
+      (self.yuv_format != YuvFormat.YUV_420)
+    with vsc.implies((self.yuv_format  == YuvFormat.YUV_420)):
+      (self.yuv_packing != YuvPacking.YUV_PACKED)
+    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PLANAR)):
+      1
 
-    @vsc.constraint
-    def cr_bit_depth(self):
-        with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
-            self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10)
-        with vsc.implies((self.rgb_format == RgbFormat.RGB_888)):
-            (self.yuv_bit_depth == BitDepth.BIT_8)
-        with vsc.implies((self.rgb_format == RgbFormat.RGB_101010)):
-            self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
-        with vsc.implies((self.rgb_format == RgbFormat.RGB_121212)):
-            (self.yuv_bit_depth == BitDepth.BIT_12)
+  @vsc.constraint
+  def cr_bit_depth(self):
+    with vsc.implies((self.yuv_packing == YuvPacking.YUV_PACKED)):
+      self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10)
+    with vsc.implies((self.rgb_format == RgbFormat.RGB_888)):
+      (self.yuv_bit_depth == BitDepth.BIT_8)
+    with vsc.implies((self.rgb_format == RgbFormat.RGB_101010)):
+      self.yuv_bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
+    with vsc.implies((self.rgb_format == RgbFormat.RGB_121212)):
+      (self.yuv_bit_depth == BitDepth.BIT_12)
 
-    @vsc.constraint
-    def cr_chroma(self):
-        with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
-            (self.chroma_enabled == 1)
-        with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
-            self.chroma_enabled in vsc.rangelist(0, 1)
+  @vsc.constraint
+  def cr_chroma(self):
+    with vsc.implies((self.yuv_format == YuvFormat.YUV_444)):
+      (self.chroma_enabled == 1)
+    with vsc.implies((self.yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420))):
+      self.chroma_enabled in vsc.rangelist(0, 1)
 
-    @vsc.constraint
-    def cr_color_matrix(self):
-        vsc.solve_order(self.color_space, self.c00)
-        vsc.solve_order(self.color_space, self.c01)
-        vsc.solve_order(self.color_space, self.c02)
-        vsc.solve_order(self.color_space, self.c10)
-        vsc.solve_order(self.color_space, self.c11)
-        vsc.solve_order(self.color_space, self.c12)
-        vsc.solve_order(self.color_space, self.c20)
-        vsc.solve_order(self.color_space, self.c21)
-        vsc.solve_order(self.color_space, self.c22)
-        with vsc.if_then(self.color_space == ColorSpace.CS_BT601):
-            self.c00 ==  298
-            self.c01 ==    0
-            self.c02 ==  409
-            self.c10 ==  298
-            self.c11 == -100
-            self.c12 == -208
-            self.c20 ==  298
-            self.c21 ==  516
-            self.c22 ==    0
-        with vsc.else_if(self.color_space == ColorSpace.CS_BT709):
-            self.c00 ==  298
-            self.c01 ==    0
-            self.c02 ==  459
-            self.c10 ==  298
-            self.c11 ==  -55
-            self.c12 == -136
-            self.c20 ==  298
-            self.c21 ==  541
-            self.c22 ==    0
-        with vsc.else_then:
-            self.c00 ==  298
-            self.c01 ==    0
-            self.c02 ==  483
-            self.c10 ==  298
-            self.c11 ==  -57
-            self.c12 == -157
-            self.c20 ==  298
-            self.c21 ==  565
-            self.c22 ==    0
+  @vsc.constraint
+  def cr_color_matrix(self):
+    vsc.solve_order(self.color_space, self.c00)
+    vsc.solve_order(self.color_space, self.c01)
+    vsc.solve_order(self.color_space, self.c02)
+    vsc.solve_order(self.color_space, self.c10)
+    vsc.solve_order(self.color_space, self.c11)
+    vsc.solve_order(self.color_space, self.c12)
+    vsc.solve_order(self.color_space, self.c20)
+    vsc.solve_order(self.color_space, self.c21)
+    vsc.solve_order(self.color_space, self.c22)
+    with vsc.if_then(self.color_space == ColorSpace.CS_BT601):
+      self.c00 ==  298
+      self.c01 ==    0
+      self.c02 ==  409
+      self.c10 ==  298
+      self.c11 == -100
+      self.c12 == -208
+      self.c20 ==  298
+      self.c21 ==  516
+      self.c22 ==    0
+    with vsc.else_if(self.color_space == ColorSpace.CS_BT709):
+      self.c00 ==  298
+      self.c01 ==    0
+      self.c02 ==  459
+      self.c10 ==  298
+      self.c11 ==  -55
+      self.c12 == -136
+      self.c20 ==  298
+      self.c21 ==  541
+      self.c22 ==    0
+    with vsc.else_then:
+      self.c00 ==  298
+      self.c01 ==    0
+      self.c02 ==  483
+      self.c10 ==  298
+      self.c11 ==  -57
+      self.c12 == -157
+      self.c20 ==  298
+      self.c21 ==  565
+      self.c22 ==    0
 
-    @vsc.constraint
-    def cr_offsets(self):
-        vsc.solve_order(self.range_mode, self.y_offset)
-        vsc.solve_order(self.range_mode, self.uv_offset)
-        vsc.solve_order(self.yuv_bit_depth, self.y_offset)
-        vsc.solve_order(self.yuv_bit_depth, self.uv_offset)
-        with vsc.if_then(self.range_mode == RangeMode.FULL_RANGE):
-            self.y_offset  == 0
-            self.uv_offset == (vsc.unsigned(1) << (self.yuv_bit_depth-1))
-        with vsc.else_then:
-            self.y_offset  == (vsc.unsigned(16) << (self.yuv_bit_depth-8))
-            self.uv_offset == (vsc.unsigned(128) << (self.yuv_bit_depth-8))
+  @vsc.constraint
+  def cr_offsets(self):
+    vsc.solve_order(self.range_mode, self.y_offset)
+    vsc.solve_order(self.range_mode, self.uv_offset)
+    vsc.solve_order(self.yuv_bit_depth, self.y_offset)
+    vsc.solve_order(self.yuv_bit_depth, self.uv_offset)
+    with vsc.if_then(self.range_mode == RangeMode.FULL_RANGE):
+      self.y_offset  == 0
+      self.uv_offset == (vsc.unsigned(1) << (self.yuv_bit_depth-1))
+    with vsc.else_then:
+      self.y_offset  == (vsc.unsigned(16) << (self.yuv_bit_depth-8))
+      self.uv_offset == (vsc.unsigned(128) << (self.yuv_bit_depth-8))
 
-    @vsc.constraint
-    def cr_dither_clip(self):
-        vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
-        vsc.solve_order(self.rgb_format, self.dither_enable)
-        vsc.solve_order(self.range_mode, self.clip_enable)
-        with vsc.implies(((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
-            (self.dither_enable == 1)
-        with vsc.implies(~((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
-            self.dither_enable in vsc.rangelist(0, 1)
-        with vsc.implies((self.range_mode == RangeMode.LIMITED_RANGE)):
-            (self.clip_enable == 1)
+  @vsc.constraint
+  def cr_dither_clip(self):
+    vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
+    vsc.solve_order(self.rgb_format, self.dither_enable)
+    vsc.solve_order(self.range_mode, self.clip_enable)
+    with vsc.implies(((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
+      (self.dither_enable == 1)
+    with vsc.implies(~((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888))):
+      self.dither_enable in vsc.rangelist(0, 1)
+    with vsc.implies((self.range_mode == RangeMode.LIMITED_RANGE)):
+      (self.clip_enable == 1)
 
-    @vsc.constraint
-    def cr_dimension_alignment(self):
-        vsc.solve_order(self.yuv_format, self.width)
-        vsc.solve_order(self.yuv_format, self.height)
-        with vsc.implies((self.yuv_format == YuvFormat.YUV_420)):
-            ((self.width % 2 == 0) & (self.height % 2 == 0))
-        with vsc.implies((self.yuv_format == YuvFormat.YUV_422)):
-            (self.width % 2 == 0)
+  @vsc.constraint
+  def cr_dimension_alignment(self):
+    vsc.solve_order(self.yuv_format, self.width)
+    vsc.solve_order(self.yuv_format, self.height)
+    with vsc.implies((self.yuv_format == YuvFormat.YUV_420)):
+      ((self.width % 2 == 0) & (self.height % 2 == 0))
+    with vsc.implies((self.yuv_format == YuvFormat.YUV_422)):
+      (self.width % 2 == 0)
 
-    @vsc.constraint
-    def cr_distributions(self):
-        vsc.dist(self.yuv_format, [
-            vsc.weight(YuvFormat.YUV_444, 20),
-            vsc.weight(YuvFormat.YUV_422, 50),
-            vsc.weight(YuvFormat.YUV_420, 30),
-        ])
-        vsc.dist(self.yuv_bit_depth, [
-            vsc.weight(BitDepth.BIT_8, 60),
-            vsc.weight(BitDepth.BIT_10, 30),
-            vsc.weight(BitDepth.BIT_12, 10),
-        ])
-        vsc.dist(self.color_space, [
-            vsc.weight(ColorSpace.CS_BT601, 40),
-            vsc.weight(ColorSpace.CS_BT709, 40),
-            vsc.weight(ColorSpace.CS_BT2020, 20),
-        ])
+  @vsc.constraint
+  def cr_distributions(self):
+    vsc.dist(self.yuv_format, [
+      vsc.weight(YuvFormat.YUV_444, 20),
+      vsc.weight(YuvFormat.YUV_422, 50),
+      vsc.weight(YuvFormat.YUV_420, 30),
+    ])
+    vsc.dist(self.yuv_bit_depth, [
+      vsc.weight(BitDepth.BIT_8, 60),
+      vsc.weight(BitDepth.BIT_10, 30),
+      vsc.weight(BitDepth.BIT_12, 10),
+    ])
+    vsc.dist(self.color_space, [
+      vsc.weight(ColorSpace.CS_BT601, 40),
+      vsc.weight(ColorSpace.CS_BT709, 40),
+      vsc.weight(ColorSpace.CS_BT2020, 20),
+    ])
 
 # =============================================================================
 # USAGE EXAMPLE
 # =============================================================================
 
 if __name__ == '__main__':
-    # Set seed for reproducibility (optional)
-    # vsc.set_randstate(12345)
+  # Set seed for reproducibility (optional)
+  # vsc.set_randstate(12345)
 
-    # Create and randomize IspYuv2rgbCfg
-    isp_yuv2rgb_cfg = IspYuv2rgbCfg()
-    isp_yuv2rgb_cfg_randomized = False
-    try:
-        isp_yuv2rgb_cfg.randomize()
-        isp_yuv2rgb_cfg_randomized = True
-        print(f'IspYuv2rgbCfg randomized successfully')
-    except Exception as e:
-        print(f'IspYuv2rgbCfg randomize failed: {e}')
+  # Create and randomize IspYuv2rgbCfg
+  isp_yuv2rgb_cfg = IspYuv2rgbCfg()
+  isp_yuv2rgb_cfg_randomized = False
+  try:
+    isp_yuv2rgb_cfg.randomize()
+    isp_yuv2rgb_cfg_randomized = True
+    print(f'IspYuv2rgbCfg randomized successfully')
+  except Exception as e:
+    print(f'IspYuv2rgbCfg randomize failed: {e}')
 
-    if isp_yuv2rgb_cfg_randomized:
-        # Print field values
-        print(f'  enable = {isp_yuv2rgb_cfg.enable}')
-        print(f'  yuv_format = {isp_yuv2rgb_cfg.yuv_format}')
-        print(f'  yuv_packing = {isp_yuv2rgb_cfg.yuv_packing}')
-        print(f'  yuv_bit_depth = {isp_yuv2rgb_cfg.yuv_bit_depth}')
-        print(f'  color_space = {isp_yuv2rgb_cfg.color_space}')
+  if isp_yuv2rgb_cfg_randomized:
+    # Print field values
+    print(f'  enable = {isp_yuv2rgb_cfg.enable}')
+    print(f'  yuv_format = {isp_yuv2rgb_cfg.yuv_format}')
+    print(f'  yuv_packing = {isp_yuv2rgb_cfg.yuv_packing}')
+    print(f'  yuv_bit_depth = {isp_yuv2rgb_cfg.yuv_bit_depth}')
+    print(f'  color_space = {isp_yuv2rgb_cfg.color_space}')
