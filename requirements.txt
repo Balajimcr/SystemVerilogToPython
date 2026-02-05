@@ -1,5 +1,6 @@
 # Required for running generated PyVSC code
 pyvsc>=0.8.0
+tqdm>=4.66.0
 
 # Optional development dependencies
 # flake8>=6.0.0  # For linting

@@ -1,36 +1,21 @@
 @echo off
-SET ENV_NAME=PyVSC_Conda
+setlocal
+
+SET ENV_NAME=pyvsc_venv
 SET PYTHON_VER=3.10
 
-:: 1. Find Anaconda Path
-set CONDA_PATH=%UserProfile%\anaconda3
-if not exist "%CONDA_PATH%" set CONDA_PATH=%ProgramData%\anaconda3
-if not exist "%CONDA_PATH%" set CONDA_PATH=%UserProfile%\Miniconda3
+:: This script uses WSL to install PyVSC in a Linux venv.
+:: Ensure WSL + a Linux distro are installed (Ubuntu recommended).
 
-:: 2. Create Environment
-echo Creating environment %ENV_NAME%...
-call "%CONDA_PATH%\Scripts\activate.bat"
-call conda create -n %ENV_NAME% python=%PYTHON_VER% -y
+echo Creating WSL venv: %ENV_NAME% (Python %PYTHON_VER%)...
 
-:: 3. Activation
-echo Activating %ENV_NAME%...
-call conda activate %ENV_NAME%
+:: Run everything inside WSL bash (single line to avoid quoting EOF issues)
+set "WSL_CMD=set -e; cd /mnt/c/D/Project_Files/Samsung/SystemVerilogToPython; if [ ! -d .wsl_venv ]; then python%PYTHON_VER% -m venv .wsl_venv; fi; source .wsl_venv/bin/activate; python -m pip install --force-reinstall --no-deps pip==24.0; python -m pip install setuptools wheel; echo \"Installing pyvsc (this may build pyboolector)...\"; python -m pip install pyvsc; python -c \"import vsc; print('SUCCESS: PyVSC is now working in WSL!')\""
+wsl -d Ubuntu -- bash -lc "%WSL_CMD%"
 
-:: 4. Downgrade Pip & Install Build Helpers
-echo Preparing installation environment...
-python -m pip install "pip<24.1"
-pip install setuptools wheel
-
-:: 5. Install pyvsc 
-:: Using --use-pep517 can sometimes help with the newer compiler versions
-echo Installing pyvsc (This may take a few minutes as it compiles pyboolector)...
-pip install pyvsc --use-deprecated=legacy-resolver
-
-:: 6. Verification
-echo.
-python -c "import vsc; print('SUCCESS: PyVSC is now working!')"
 if %ERRORLEVEL% NEQ 0 (
-    echo [FAILED] If the error is still 'build failed', ensure you restarted after installing Visual Studio Build Tools.
+    echo [FAILED] WSL install failed. Verify WSL is installed and the Ubuntu distro name is correct.
+    echo If your distro isn't Ubuntu, replace 'Ubuntu' above with your distro name.
 )
 
 pause

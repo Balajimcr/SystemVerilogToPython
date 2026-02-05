@@ -16,9 +16,18 @@ import re
 import argparse
 import sys
 import textwrap
+import os
+import glob
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Set
 from enum import Enum, auto
+
+try:
+    from tqdm import tqdm
+except ImportError:  # tqdm is optional at runtime
+    tqdm = None
 
 
 # =============================================================================
@@ -146,6 +155,53 @@ CONSTRAINT_PATTERNS = [
     (ConstraintType.RELATIONAL, r'[<>]=?'),
 ]
 
+# Pre-compiled regex patterns for faster field extraction
+FIELD_PATTERNS = [
+    # rand/randc bit/logic [signed] [N:0] name [array]
+    re.compile(r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*$'),
+    # rand/randc int/byte/shortint/longint [signed|unsigned] name
+    re.compile(r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b(?:\s+(signed|unsigned))?\s+(\w+)\s*$'),
+    # rand/randc enum_type name
+    re.compile(r'^\s*(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*$'),
+]
+
+FIELD_COMMA_BIT_RE = re.compile(
+    r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)\s*$'
+)
+FIELD_COMMA_INT_RE = re.compile(
+    r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b\s*(signed|unsigned)?\s+(\w+(?:\s*,\s*\w+)+)\s*$'
+)
+
+FIELD_SKIP_KEYWORDS = (
+    'solve ', 'inside ', 'dist ', ' before ', 'foreach',
+    'unique', 'constraint ', 'function ', 'endfunction',
+    'if ', 'else', 'return', '==', '!=', '<=', '>=', '->'
+)
+
+
+class _NullProgress:
+    def update(self, n: int = 1) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+_tqdm_missing_warned = False
+
+
+def _get_progress_bar(total: int, desc: str, enabled: bool):
+    """Return a tqdm progress bar if available/enabled, otherwise a no-op."""
+    global _tqdm_missing_warned
+    if not enabled:
+        return _NullProgress()
+    if tqdm is None:
+        if not _tqdm_missing_warned:
+            print("Progress disabled: tqdm not installed", file=sys.stderr)
+            _tqdm_missing_warned = True
+        return _NullProgress()
+    return tqdm(total=total, desc=desc, unit="item")
+
 
 # =============================================================================
 # SV PARSER
@@ -229,14 +285,6 @@ class SVParser:
     def _extract_fields(self, class_body: str) -> List[SVField]:
         """Extract field declarations from class body."""
         fields = []
-        patterns = [
-            # rand/randc bit/logic [signed] [N:0] name [array]
-            r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s*(\w+)\s*(?:\[(\d+)\]|\[\])?\s*$',
-            # rand/randc int/byte/shortint/longint [signed|unsigned] name
-            r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b(?:\s+(signed|unsigned))?\s+(\w+)\s*$',
-            # rand/randc enum_type name
-            r'^\s*(rand|randc)?\s*(\w+_[et])\s+(\w+)\s*$',
-        ]
 
         # Remove constraint blocks, function blocks from class body before parsing fields
         cleaned_body = self._remove_blocks_for_field_extraction(class_body)
@@ -248,10 +296,7 @@ class SVParser:
                 continue
             
             # Skip lines that look like constraint internals or other non-field content
-            skip_keywords = ['solve ', 'inside ', 'dist ', ' before ', 'foreach', 
-                           'unique', 'constraint ', 'function ', 'endfunction',
-                           'if ', 'else', 'return', '==', '!=', '<=', '>=', '->']
-            if any(kw in line for kw in skip_keywords):
+            if any(kw in line for kw in FIELD_SKIP_KEYWORDS):
                 continue
             
             # Skip lines that are just braces or comments
@@ -259,7 +304,7 @@ class SVParser:
                 continue
 
             # Handle comma-separated field declarations: rand bit [signed] [7:0] a, b, c;
-            comma_match = re.match(r'^\s*(rand|randc)?\s*(bit|logic)\b\s*(signed)?\s*(?:\[(\d+):0\])?\s+(\w+(?:\s*,\s*\w+)+)\s*$', line)
+            comma_match = FIELD_COMMA_BIT_RE.match(line)
             if comma_match:
                 rand_type, data_type, signed_str, width_str, names_str = comma_match.groups()
                 width = int(width_str) + 1 if width_str else 1
@@ -278,7 +323,7 @@ class SVParser:
                 continue
 
             # Handle comma-separated int declarations: rand int signed a, b, c;
-            int_comma_match = re.match(r'^\s*(rand|randc)?\s*(int|byte|shortint|longint)\b\s*(signed|unsigned)?\s+(\w+(?:\s*,\s*\w+)+)\s*$', line)
+            int_comma_match = FIELD_COMMA_INT_RE.match(line)
             if int_comma_match:
                 rand_type, data_type, sign_spec, names_str = int_comma_match.groups()
                 width = WIDTH_MAP[data_type]
@@ -297,8 +342,8 @@ class SVParser:
                 continue
 
             # Try each standard pattern
-            for pattern in patterns:
-                match = re.match(pattern, line)
+            for pattern in FIELD_PATTERNS:
+                match = pattern.match(line)
                 if match:
                     parsed = self._parse_field_match(match.groups(), line + ';')
                     if parsed and self._is_valid_field_name(parsed.name):
@@ -534,7 +579,7 @@ class PyVSCGenerator:
         self.mapping_notes: List[str] = []
         self.statistics: Dict[str, int] = {}
 
-    def generate(self, sv_classes: List[SVClass]) -> TranslationResult:
+    def generate(self, sv_classes: List[SVClass], jobs: int = 1, progress: bool = False) -> TranslationResult:
         """Generate pyvsc code for all classes."""
         self._reset_state()
         
@@ -581,17 +626,33 @@ class PyVSCGenerator:
             if stub_code:
                 code_parts.append(stub_code)
 
-        # Generate classes
-        for sv_class in sv_classes:
-            class_code = self._generate_class(sv_class)
-            
-            # Validate the generated code
-            validation_issues = self._validate_generated_code(sv_class, class_code)
-            for issue in validation_issues:
-                self._add_warning(issue)
-            
-            code_parts.append(class_code)
-            self.statistics['classes'] += 1
+        # Generate classes (optionally in parallel)
+        if jobs > 1 and len(sv_classes) > 1:
+            class_results = self._generate_classes_parallel(sv_classes, jobs, progress)
+            for result in class_results:
+                code_parts.append(result['code'])
+                self.warnings.extend(result['warnings'])
+                self.mapping_notes.extend(result['mapping_notes'])
+                self.manual_review_items.extend(result['manual_review_items'])
+                self.statistics['fields'] += result['statistics'].get('fields', 0)
+                self.statistics['constraints'] += result['statistics'].get('constraints', 0)
+            self.statistics['classes'] += len(sv_classes)
+        else:
+            pbar = _get_progress_bar(len(sv_classes), "Translating classes", progress and len(sv_classes) > 1)
+            try:
+                for sv_class in sv_classes:
+                    class_code = self._generate_class(sv_class)
+
+                    # Validate the generated code
+                    validation_issues = self._validate_generated_code(sv_class, class_code)
+                    for issue in validation_issues:
+                        self._add_warning(issue)
+
+                    code_parts.append(class_code)
+                    self.statistics['classes'] += 1
+                    pbar.update(1)
+            finally:
+                pbar.close()
 
         code_parts.append(self._generate_usage_example(sv_classes))
         
@@ -612,6 +673,59 @@ class PyVSCGenerator:
             mapping_notes=self.mapping_notes,
             statistics=self.statistics
         )
+
+    def _spawn_worker_generator(self) -> "PyVSCGenerator":
+        """Create a worker generator with shared enum mappings and fresh state."""
+        worker = PyVSCGenerator(verbose=self.verbose)
+        worker.enum_value_map = self.enum_value_map
+        worker.enum_class_names = self.enum_class_names
+        worker.statistics = {'classes': 0, 'fields': 0, 'constraints': 0, 'enums': 0}
+        worker.warnings = []
+        worker.manual_review_items = []
+        worker.mapping_notes = []
+        return worker
+
+    def _generate_class_package(self, sv_class: SVClass) -> Dict[str, object]:
+        """Generate class code and collect per-class warnings/notes."""
+        worker = self._spawn_worker_generator()
+        class_code = worker._generate_class(sv_class)
+
+        validation_issues = worker._validate_generated_code(sv_class, class_code)
+        for issue in validation_issues:
+            worker._add_warning(issue)
+
+        return {
+            'code': class_code,
+            'warnings': worker.warnings,
+            'mapping_notes': worker.mapping_notes,
+            'manual_review_items': worker.manual_review_items,
+            'statistics': worker.statistics,
+        }
+
+    def _generate_classes_parallel(
+        self,
+        sv_classes: List[SVClass],
+        jobs: int,
+        progress: bool
+    ) -> List[Dict[str, object]]:
+        """Generate class code in parallel while preserving input order."""
+        results: List[Optional[Dict[str, object]]] = [None] * len(sv_classes)
+        pbar = _get_progress_bar(len(sv_classes), "Translating classes", progress)
+        try:
+            with ThreadPoolExecutor(max_workers=jobs) as executor:
+                future_map = {
+                    executor.submit(self._generate_class_package, sv_class): idx
+                    for idx, sv_class in enumerate(sv_classes)
+                }
+                for future in as_completed(future_map):
+                    idx = future_map[future]
+                    results[idx] = future.result()
+                    pbar.update(1)
+        finally:
+            pbar.close()
+
+        # mypy/typing: results is fully populated
+        return results  # type: ignore[return-value]
 
     def _generate_base_class_stubs(self, parent_classes: Set[str]) -> str:
         """Generate stub classes for undefined parent classes (like UVM base classes)."""
@@ -2389,21 +2503,29 @@ class SVtoPyVSCTranslator:
         self.parser = SVParser()
         self.generator = PyVSCGenerator(verbose=verbose)
 
-    def translate_file(self, input_path: str, output_path: Optional[str] = None) -> TranslationResult:
+    def translate_file(
+        self,
+        input_path: str,
+        output_path: Optional[str] = None,
+        jobs: int = 1,
+        progress: bool = False,
+        print_output: bool = True
+    ) -> TranslationResult:
         """Translate a SystemVerilog file to pyvsc."""
         with open(input_path, 'r') as f:
             sv_code = f.read()
 
-        result = self.translate_code(sv_code)
+        result = self.translate_code(sv_code, jobs=jobs, progress=progress)
 
         if output_path:
             with open(output_path, 'w') as f:
                 f.write(result.pyvsc_code)
-            print(f"Output written to: {output_path}")
+            if print_output:
+                print(f"Output written to: {output_path}")
 
         return result
 
-    def translate_code(self, sv_code: str) -> TranslationResult:
+    def translate_code(self, sv_code: str, jobs: int = 1, progress: bool = False) -> TranslationResult:
         """Translate SystemVerilog code string to pyvsc."""
         sv_classes = self.parser.parse(sv_code)
 
@@ -2416,7 +2538,7 @@ class SVtoPyVSCTranslator:
                 statistics={'classes': 0, 'fields': 0, 'constraints': 0, 'enums': 0}
             )
 
-        return self.generator.generate(sv_classes)
+        return self.generator.generate(sv_classes, jobs=jobs, progress=progress)
 
     def print_report(self, result: TranslationResult):
         """Print translation report with comprehensive metrics."""
@@ -2524,8 +2646,64 @@ class SVtoPyVSCTranslator:
 # CLI INTERFACE
 # =============================================================================
 
+def _expand_input_paths(input_arg: str) -> List[Path]:
+    """Expand input argument into a list of .sv files."""
+    if any(ch in input_arg for ch in ['*', '?', '[']):
+        return [Path(p) for p in sorted(glob.glob(input_arg))]
+
+    path = Path(input_arg)
+    if path.is_dir():
+        return sorted(path.rglob('*.sv'))
+    return [path]
+
+
+def _resolve_output_paths(
+    input_paths: List[Path],
+    output_arg: str,
+    default_output: str
+) -> Dict[Path, Path]:
+    """Resolve output paths for one or more input files."""
+    output_provided = output_arg != default_output
+
+    if len(input_paths) == 1:
+        return {input_paths[0]: Path(output_arg)}
+
+    if output_provided:
+        out_dir = Path(output_arg)
+        if out_dir.suffix:
+            raise ValueError("Output must be a directory when translating multiple files.")
+        out_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        out_dir = None
+
+    mapping: Dict[Path, Path] = {}
+    for in_path in input_paths:
+        out_path = (out_dir / f"{in_path.stem}.py") if out_dir else in_path.with_suffix('.py')
+        mapping[in_path] = out_path
+    return mapping
+
+
+def _translate_file_task(
+    input_path: Path,
+    output_path: Path,
+    report: bool,
+    class_jobs: int,
+    progress: bool,
+    print_output: bool
+) -> TranslationResult:
+    translator = SVtoPyVSCTranslator(verbose=report)
+    return translator.translate_file(
+        str(input_path),
+        str(output_path),
+        jobs=class_jobs,
+        progress=progress,
+        print_output=print_output
+    )
+
+
 def main():
     """Main entry point for CLI usage."""
+    default_output = 'example_sv_classes.py'
     parser = argparse.ArgumentParser(
         description='SystemVerilog to pyvsc Translation Assistant',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2544,33 +2722,147 @@ def main():
         'input',
         nargs='?',
         default='example_sv_classes.sv',
-        help='Input SystemVerilog file (default: example_sv_classes.sv)'
+        help='Input SystemVerilog file, directory, or glob pattern (default: example_sv_classes.sv)'
     )
 
     parser.add_argument(
         '-o', '--output',
-        default='example_sv_classes.py',
+        default=default_output,
         help='Output Python file (default: example_sv_classes.py)'
     )
 
+    parser.add_argument(
+        '-j', '--jobs',
+        type=int,
+        default=0,
+        help='Number of worker threads (0 = auto)'
+    )
+
+    parser.add_argument(
+        '--class-jobs',
+        type=int,
+        default=0,
+        help='Number of worker threads per file for class translation (0 = auto)'
+    )
+
+    parser.add_argument(
+        '--progress',
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help='Show progress bar (requires tqdm)'
+    )
 
     parser.add_argument('-r', '--report', action='store_true', help='Print translation report')
 
     args = parser.parse_args()
 
-    translator = SVtoPyVSCTranslator(verbose=args.report)
+    input_paths = _expand_input_paths(args.input)
+    if not input_paths:
+        print(f"Error: No input files found for '{args.input}'", file=sys.stderr)
+        sys.exit(1)
 
     try:
-        result = translator.translate_file(args.input, args.output)
+        output_map = _resolve_output_paths(input_paths, args.output, default_output)
     except FileNotFoundError:
         print(f"Error: File not found: {args.input}", file=sys.stderr)
         sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
-        print(f"Error during translation: {e}", file=sys.stderr)
+        print(f"Error during translation setup: {e}", file=sys.stderr)
         sys.exit(1)
 
-    if args.report:
-        translator.print_report(result)
+    file_count = len(input_paths)
+    auto_jobs = max(1, os.cpu_count() or 1)
+    file_jobs = args.jobs if args.jobs > 0 else auto_jobs
+
+    # Avoid noisy reports for multi-file runs
+    if args.report and file_count > 1:
+        print("Note: --report is only shown for single-file translations.", file=sys.stderr)
+
+    # Class-level parallelism is only shown in progress when single-file
+    if args.class_jobs > 0:
+        class_jobs = args.class_jobs
+    else:
+        class_jobs = file_jobs if file_count == 1 else 1
+
+    progress_files = args.progress and file_count > 1
+    progress_classes = args.progress and file_count == 1
+
+    # Single-file path keeps full report/metrics intact
+    if file_count == 1:
+        only_input = input_paths[0]
+        out_path = output_map[only_input]
+        translator = SVtoPyVSCTranslator(verbose=args.report)
+        try:
+            result = translator.translate_file(
+                str(only_input),
+                str(out_path),
+                jobs=class_jobs,
+                progress=progress_classes,
+                print_output=True
+            )
+        except Exception as e:
+            print(f"Error during translation: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if args.report:
+            translator.print_report(result)
+        return
+
+    # Multi-file path (file-level parallelism)
+    results: Dict[Path, TranslationResult] = {}
+    errors: List[Tuple[Path, Exception]] = []
+
+    if file_jobs > 1:
+        pbar = _get_progress_bar(file_count, "Translating files", progress_files)
+        try:
+            with ThreadPoolExecutor(max_workers=file_jobs) as executor:
+                future_map = {
+                    executor.submit(
+                        _translate_file_task,
+                        in_path,
+                        out_path,
+                        False,
+                        class_jobs,
+                        False,
+                        not progress_files
+                    ): in_path
+                    for in_path, out_path in output_map.items()
+                }
+                for future in as_completed(future_map):
+                    in_path = future_map[future]
+                    try:
+                        results[in_path] = future.result()
+                    except Exception as e:
+                        errors.append((in_path, e))
+                    pbar.update(1)
+        finally:
+            pbar.close()
+    else:
+        pbar = _get_progress_bar(file_count, "Translating files", progress_files)
+        try:
+            for in_path, out_path in output_map.items():
+                try:
+                    results[in_path] = _translate_file_task(
+                        in_path,
+                        out_path,
+                        False,
+                        class_jobs,
+                        False,
+                        not progress_files
+                    )
+                except Exception as e:
+                    errors.append((in_path, e))
+                pbar.update(1)
+        finally:
+            pbar.close()
+
+    if errors:
+        for in_path, err in errors:
+            print(f"Error during translation of {in_path}: {err}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
