@@ -189,7 +189,7 @@ class IspYuv2rgbCfg:
     vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
     vsc.solve_order(self.rgb_format, self.dither_enable)
     vsc.solve_order(self.range_mode, self.clip_enable)
-    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8)  and  (self.rgb_format == RgbFormat.RGB_888)):
+    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8)  &  (self.rgb_format == RgbFormat.RGB_888)):
       self.dither_enable == 1
     with vsc.else_then:
       self.dither_enable in vsc.rangelist(0, 1)
@@ -226,7 +226,7 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def tc_logical_ops(self):
-    with vsc.if_then((self.a > 8)  and  (self.b < 4)):
+    with vsc.if_then((self.a > 8)  &  (self.b < 4)):
       self.c == 1
     with vsc.else_then:
       self.c == 0
@@ -249,7 +249,7 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def tc_not(self):
-    with vsc.if_then(not (self.mode == 0)):
+    with vsc.if_then(~(self.mode == 0)):
       self.bit_depth == BitDepth.BIT_10
 
   @vsc.constraint

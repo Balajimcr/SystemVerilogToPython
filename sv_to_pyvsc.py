@@ -2252,23 +2252,26 @@ from typing import Optional'''
         """Convert SystemVerilog logical operators to PyVSC equivalents.
 
         Conversions:
-        - && -> and
-        - || -> or
-        - !expr -> not expr
-        - !(a && b) -> not (a and b)
-        - !(a || b) -> not (a or b)
-        """
-        # First convert && to and and || to or
-        expr = re.sub(r'&&', ' and ', expr)
-        expr = re.sub(r'\|\|', ' or ', expr)
+        - && -> &
+        - || -> |
+        - !(expr) -> ~(expr)
+        - !var -> ~self.var
 
-        # Convert ! to not for logical NOT
+        Note: PyVSC overloads ~ on its expression objects for logical NOT.
+        Python 'not' cannot be used because it evaluates to a plain bool
+        before PyVSC can capture the expression tree.
+        """
+        # Convert && to & and || to |
+        expr = re.sub(r'&&', ' & ', expr)
+        expr = re.sub(r'\|\|', ' | ', expr)
+
+        # Convert ! to ~ for logical NOT (PyVSC overloads ~ on expr objects)
         # Handle !( patterns first (negation of grouped expressions)
-        expr = re.sub(r'!\s*\(', 'not (', expr)
+        expr = re.sub(r'!\s*\(', '~(', expr)
 
         # Handle !var patterns (negation of single variables)
         # But don't convert != (not equal)
-        expr = re.sub(r'!(?!=)(\w)', r'not \1', expr)
+        expr = re.sub(r'!(?!=)(\w)', r'~\1', expr)
 
         return expr
 
@@ -2324,7 +2327,7 @@ from typing import Optional'''
 
         PyVSC doesn't support True/False or bare variables in conditions.
         Convert: self.var -> (self.var != 0)
-        Convert: not self.var -> (self.var == 0)
+        Convert: ~self.var -> (self.var == 0)
         """
         # Don't convert if it already has a comparison operator
         if any(op in expr for op in ['==', '!=', '<', '>', '<=', '>=']):
@@ -2338,8 +2341,8 @@ from typing import Optional'''
         if ' in vsc.rangelist' in expr:
             return expr
 
-        # Handle 'not self.var' -> '(self.var == 0)'
-        not_match = re.match(r'^not\s+(self\.\w+)$', expr.strip())
+        # Handle '~self.var' -> '(self.var == 0)'
+        not_match = re.match(r'^~\s*(self\.\w+)$', expr.strip())
         if not_match:
             return f'({not_match.group(1)} == 0)'
 
