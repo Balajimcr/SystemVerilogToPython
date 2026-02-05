@@ -2239,6 +2239,7 @@ from typing import Optional'''
 
         expr = self._convert_numbers(expr)
         expr = self._convert_literal_shifts(expr)
+        expr = self._convert_division_operator(expr)
         expr = self._convert_logical_operators(expr)
         expr = self._convert_inside_expression(expr)
         expr = self._convert_bit_slicing(expr)
@@ -2281,6 +2282,20 @@ from typing import Optional'''
             return f"{prefix}vsc.unsigned({literal}) {op}"
 
         return re.sub(pattern, repl, expr)
+
+    @staticmethod
+    def _convert_division_operator(expr: str) -> str:
+        """Convert SV integer division '/' to Python integer division '//'.
+
+        Replaces '/' with '//' while preserving:
+        - Existing '//' (already integer division)
+        - '!=' (not-equal operator)
+        - Shift operators '<<', '>>'
+        """
+        # Replace single '/' that is not part of '//' with '//'
+        # Negative lookbehind: not preceded by '/'
+        # Negative lookahead: not followed by '/' or '='
+        return re.sub(r'(?<!/)/(?![/=])', '//', expr)
 
     def _qualify_enum_values(self, expr: str) -> str:
         """Qualify enum value literals with their enum class name."""

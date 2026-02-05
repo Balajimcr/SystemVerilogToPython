@@ -80,6 +80,19 @@ class IspYuv2rgbCfg:
     self.c22 = vsc.rand_int32_t()
     self.y_offset = vsc.rand_int32_t()
     self.uv_offset = vsc.rand_int32_t()
+    self.a = vsc.rand_int32_t()
+    self.b = vsc.rand_int32_t()
+    self.c = vsc.rand_int32_t()
+    self.d = vsc.rand_int32_t()
+    self.x = vsc.rand_int32_t()
+    self.y = vsc.rand_int32_t()
+    self.z = vsc.rand_int32_t()
+    self.w = vsc.rand_int32_t()
+    self.arith_width = vsc.rand_int32_t()
+    self.stride = vsc.rand_int32_t()
+    self.fmt = vsc.rand_int32_t()
+    self.bit_depth = vsc.rand_int32_t()
+    self.arith_y_offset = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_basic_ranges(self):
@@ -206,6 +219,43 @@ class IspYuv2rgbCfg:
       vsc.weight(ColorSpace.CS_BT709, 40),
       vsc.weight(ColorSpace.CS_BT2020, 20),
     ])
+
+  @vsc.constraint
+  def c_basic_compound(self):
+    self.w == (self.a * self.b + self.c) // self.d
+    self.z == ((self.w * 10) + 7) // 8
+
+  @vsc.constraint
+  def c_assignment(self):
+    self.x == self.y + 1
+    self.x >= self.y * 4
+    self.x <= (self.y + 7) // 8
+
+  @vsc.constraint
+  def c_shift(self):
+    self.arith_y_offset == (vsc.unsigned(1) << (self.bit_depth - 1))
+    self.x == self.y << 2
+    self.z == self.w >> 1
+
+  @vsc.constraint
+  def c_modulo(self):
+    (self.x % 2) == 0
+    (self.arith_width % 4) == 0
+
+  @vsc.constraint
+  def c_compound_bool(self):
+    (self.a > 8) & (self.b < 4)
+    (self.x + self.y) >= self.z
+
+  @vsc.constraint
+  def c_conditional(self):
+    with vsc.if_then(self.fmt == 0):
+      self.stride >= (self.arith_width * 8 + 7) // 8
+
+  @vsc.constraint
+  def c_golden(self):
+    self.stride >= (self.arith_width * self.bit_depth + 7) // 8
+    self.stride <= ((self.arith_width * self.bit_depth + 7) // 8) * 125 // 100
 
 # =============================================================================
 # USAGE EXAMPLE

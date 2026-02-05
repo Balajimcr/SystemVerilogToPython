@@ -49,6 +49,22 @@ class isp_yuv2rgb_cfg;
     rand int signed uv_offset;
 
     // ========================================================================
+    // ARITHMETIC TRANSLATION TEST (Merged)
+    // ========================================================================
+    rand int a;
+    rand int b;
+    rand int c;
+    rand int d;
+    rand int x;
+    rand int y;
+    rand int z;
+    rand int w;
+    rand int arith_width, stride; // Renamed width to avoid conflict
+    rand int fmt;
+    rand int bit_depth;
+    rand int arith_y_offset;      // Renamed y_offset to avoid conflict
+
+    // ========================================================================
     // BASIC RANGES
     // ========================================================================
     constraint cr_basic_ranges {
@@ -218,4 +234,50 @@ class isp_yuv2rgb_cfg;
         };
     }
 
+    
+
+    // 1 & 2. Basic & Compound Arithmetic
+    constraint c_basic_compound {
+        w == (a * b + c) / d;      // Should translate to //
+        z == ((w * 10) + 7) / 8;
+    }
+
+    // 3. Assignment-Style
+    constraint c_assignment {
+        x == y + 1;
+        x >= y * 4;
+        x <= (y + 7) / 8;
+    }
+
+    // 4 & 5. Shift Operators & Power-of-Two
+    constraint c_shift {
+        arith_y_offset == (1 << (bit_depth - 1));
+        x == y << 2;  // Multiply by 4
+        z == w >> 1;  // Divide by 2
+    }
+
+    // 6. Modulo / Alignment
+    constraint c_modulo {
+        (x % 2) == 0;
+        (arith_width % 4) == 0;
+    }
+
+    // 7. Compound Arithmetic + Boolean
+    constraint c_compound_bool {
+        (a > 8) && (b < 4);
+        (x + y) >= z;
+    }
+
+    // 8. Arithmetic Inside Conditionals
+    constraint c_conditional {
+        if (fmt == 0) {
+            stride >= (arith_width * 8 + 7) / 8;
+        }
+    }
+
+    // 10. Golden Rule Example (Solver-Safe Math)
+    constraint c_golden {
+        stride >= (arith_width * bit_depth + 7) / 8;
+        stride <= ((arith_width * bit_depth + 7) / 8) * 125 / 100;
+    }
 endclass
