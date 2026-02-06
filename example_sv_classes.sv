@@ -81,6 +81,68 @@ class isp_yuv2rgb_cfg;
     rand int range;
 
     // ========================================================================
+    // DEFAULT RANGELISTS
+    // ========================================================================
+    constraint cr_default_rangelists {
+
+        // ---- enum-backed ints ----
+        yuv_format     inside {YUV_444, YUV_422, YUV_420};
+        yuv_packing    inside {YUV_PLANAR, YUV_SEMI_PLANAR, YUV_PACKED};
+        color_space    inside {CS_BT601, CS_BT709, CS_BT2020};
+        range_mode     inside {FULL_RANGE, LIMITED_RANGE};
+        rgb_format     inside {RGB_888, RGB_101010, RGB_121212};
+        yuv_bit_depth  inside {BIT_8, BIT_10, BIT_12};
+
+        // ---- booleans ----
+        enable          inside {0,1};
+        chroma_enabled  inside {0,1};
+        dither_enable   inside {0,1};
+        clip_enable     inside {0,1};
+
+        // ---- frame geometry ----
+        width           inside {[64:16384]};
+        height          inside {[64:16384]};
+
+        // ---- matrix coefficients (signed fixed-point) ----
+        c00 inside {[-1024:1023]};
+        c01 inside {[-1024:1023]};
+        c02 inside {[-1024:1023]};
+        c10 inside {[-1024:1023]};
+        c11 inside {[-1024:1023]};
+        c12 inside {[-1024:1023]};
+        c20 inside {[-1024:1023]};
+        c21 inside {[-1024:1023]};
+        c22 inside {[-1024:1023]};
+
+        // ---- offsets ----
+        y_offset  inside {[-65536:65535]};
+        uv_offset inside {[-65536:65535]};
+        arith_y_offset inside {[-65536:65535]};
+
+        // ---- arithmetic scratch variables ----
+        a inside {[-1024:1023]};
+        b inside {[-1024:1023]};
+        c inside {[-1024:1023]};
+        d inside {[1:1024]};      // avoid divide-by-zero
+
+        x inside {[-4096:4095]};
+        y inside {[-4096:4095]};
+        z inside {[-4096:4095]};
+        w inside {[-4096:4095]};
+
+        arith_width inside {[1:16384]};
+        stride      inside {[1:131072]};
+
+        bit_depth inside {[1:16]};
+        fmt       inside {[0:3]};
+        mode      inside {[0:3]};
+        range     inside {[0:1]};
+
+        signed_val   inside {[-128:127]};
+        unsigned_val inside {[0:255]};
+    }
+
+    // ========================================================================
     // BASIC RANGES
     // ========================================================================
     constraint cr_basic_ranges {
