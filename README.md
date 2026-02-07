@@ -14,6 +14,7 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 
 - **Parses SystemVerilog** constraint classes, enums, and hierarchies
 - **Generates PyVSC code** with proper decorators and type mappings
+- **GUI workflow** for translation, PyVSC testing, and test-vector generation
 - **Translates constraint constructs**:
   - `rand`/`randc` fields with proper type mapping
   - `inside` range constraints → `vsc.rangelist()` (expression form uses `.inside()`)
@@ -35,6 +36,9 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 - **Provides translation report** with statistics and warnings
 - **Multi-threaded translation** (file-level and class-level)
 - **Progress bars** for file/class translation (via `tqdm`)
+- **PyVSC randomization test runner** (GUI + CLI)
+- **Test vector generation** from PyVSC randomized models (GUI + CLI)
+- **Deterministic runs** via random seed for repeatable vectors
 
 ## Installation
 
@@ -74,6 +78,38 @@ python sv_to_pyvsc.py input.sv --class-jobs 8 --progress
 Notes:
 - `--progress` uses `tqdm`. Disable with `--no-progress` if you don't want a bar.
 - When translating multiple files, `-o` must be a directory.
+
+### GUI (Recommended for End-to-End Flow)
+
+Launch the GUI:
+
+```bash
+python sv_to_pyvsc_gui.py
+```
+
+Or on Windows:
+
+```bat
+run_gui.bat
+```
+
+GUI capabilities:
+- Browse input `.sv`, output `.py`, and `hw_field.txt` files
+- Auto-detect PyVSC class name from the SV file
+- Run **Step 1** translation, **Step 2** PyVSC randomization test, and **Step 3** test-vector generation
+- One-click **Run All Steps** pipeline
+- WSL toggle for PyVSC execution (required for PyVSC tests on Windows)
+- Live log output with colored status + concise results summary
+
+### Test Vector Generation (CLI)
+
+```bash
+# Generate 10 test vectors into ./test_vectors
+python generate_test_vectors.py example_sv_classes IspYuv2rgbCfg hw_field.txt 10 ./test_vectors
+
+# Deterministic runs
+python generate_test_vectors.py example_sv_classes IspYuv2rgbCfg hw_field.txt 100 ./test_vectors --seed 12345
+```
 
 ### Python API
 
@@ -326,12 +362,15 @@ class AxiTransaction:
 ```
 SystemVerilogToPython/
 ├── sv_to_pyvsc.py           # Main translator
+├── sv_to_pyvsc_gui.py       # Tkinter GUI wrapper (translate/test/generate)
+├── generate_test_vectors.py # PyVSC test vector generator
 ├── validation_utils.py       # Validation utilities
 ├── example_sv_classes.sv     # Example SV input
 ├── example_sv_classes.py     # Example translated output
 ├── install_pyvsc.bat         # Windows install helper (legacy)
 ├── install_pyvsc_wsl.bat     # WSL install helper for PyVSC
 ├── run_example.bat           # Windows example runner
+├── run_gui.bat               # Windows GUI launcher
 ├── README.md                 # This file
 ├── CLAUDE.md                 # Development guidelines
 ├── requirements.txt          # Python dependencies
