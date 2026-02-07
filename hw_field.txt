@@ -1,0 +1,36 @@
+# Hardware Field Configuration File
+# Format: field_name default_value
+# Lines starting with # are comments
+
+# Core Controls
+enable 1
+yuv_format 0
+yuv_packing 0
+yuv_bit_depth 0
+color_space 0
+range_mode 0
+rgb_format 0
+
+# Frame Geometry
+width 0
+height 0
+
+# Feature Enables
+chroma_enabled 0
+dither_enable 0
+clip_enable 0
+
+# Matrix Coefficients
+c00 0
+c01 0
+c02 0
+c10 0
+c11 0
+c12 0
+c20 0
+c21 0
+c22 0
+
+# Offsets
+y_offset 0
+uv_offset 0
