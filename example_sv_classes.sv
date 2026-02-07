@@ -445,4 +445,24 @@ class isp_yuv2rgb_cfg;
             d == 100;
     }
 
+    // ========================================================================
+    // DISTRIBUTION WITH RANGES (vsc.weight takes only 2 args, not 3)
+    // ========================================================================
+
+    rand int ip_post_frame_gap;
+    rand int packet_size;
+    rand int delay_cycles;
+
+    constraint cr_dist_range {
+        ip_post_frame_gap dist { [10:2000]:/95, [2001:50000]:/5 };
+    }
+
+    constraint cr_dist_mixed {
+        packet_size dist { 64:=10, 128:=20, [256:1024]:/50, [1025:4096]:/20 };
+    }
+
+    constraint cr_dist_simple {
+        delay_cycles dist { 0:=50, 1:=30, [2:10]:/20 };
+    }
+
 endclass

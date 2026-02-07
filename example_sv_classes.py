@@ -105,6 +105,9 @@ class IspYuv2rgbCfg:
     self.yuv_rdmaY_img_stride_1p = vsc.rand_int32_t()
     self.yuv_rdmaY_sbwc_lossy_comp_mode = vsc.rand_int32_t()
     self.yuv_rdmaY_comp_64B_align = vsc.rand_int32_t()
+    self.ip_post_frame_gap = vsc.rand_int32_t()
+    self.packet_size = vsc.rand_int32_t()
+    self.delay_cycles = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -390,6 +393,30 @@ class IspYuv2rgbCfg:
   def cr_mixed_and_or(self):
     with vsc.if_then((self.a == 1) & (self.b == 2) | (self.c == 3)):
       self.d == 100
+
+  @vsc.constraint
+  def cr_dist_range(self):
+    vsc.dist(self.ip_post_frame_gap, [
+      vsc.weight(vsc.rng(10, 2000), 95),
+      vsc.weight(vsc.rng(2001, 50000), 5),
+    ])
+
+  @vsc.constraint
+  def cr_dist_mixed(self):
+    vsc.dist(self.packet_size, [
+      vsc.weight(64, 10),
+      vsc.weight(128, 20),
+      vsc.weight(vsc.rng(256, 1024), 50),
+      vsc.weight(vsc.rng(1025, 4096), 20),
+    ])
+
+  @vsc.constraint
+  def cr_dist_simple(self):
+    vsc.dist(self.delay_cycles, [
+      vsc.weight(0, 50),
+      vsc.weight(1, 30),
+      vsc.weight(vsc.rng(2, 10), 20),
+    ])
 
 # =============================================================================
 # USAGE EXAMPLE

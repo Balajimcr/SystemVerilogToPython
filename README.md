@@ -30,7 +30,7 @@ This is a **Translation Assistant**, not an automated converter. The generated c
   - Signed variables (`rand bit signed [N:0]`) → `vsc.rand_int_t(N)`
   - Standard int types with signed/unsigned support
 - **Clean output by default** - no comments or docstrings cluttering the code
-- **Verbose mode (-r)** - includes original SV code and metrics in docstrings
+- **Verbose mode (-r)** - includes original SV code and metrics in docstrings (metrics/validation only run in `-r` mode)
 - **Flags items requiring manual review**
 - **Provides translation report** with statistics and warnings
 - **Multi-threaded translation** (file-level and class-level)

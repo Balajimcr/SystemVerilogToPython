@@ -2654,7 +2654,20 @@ from typing import Optional'''
         return items
 
     def _translate_distribution(self, var_name: str, dist_body: str) -> List[str]:
-        """Translate distribution constraint."""
+        """Translate distribution constraint.
+
+        SystemVerilog syntax:
+            var dist { val1 := weight1, [low:high] :/ weight2, ... }
+
+        PyVSC syntax:
+            vsc.dist(self.var, [
+                vsc.weight(val1, weight1),
+                vsc.weight(vsc.rng(low, high), weight2),
+            ])
+
+        Note: := is per-item weight, :/ is per-range weight in SV.
+        PyVSC handles this automatically based on whether val is a range.
+        """
         weights = []
 
         for item in dist_body.split(','):
@@ -2663,8 +2676,8 @@ from typing import Optional'''
                 continue
 
             # Per-item weight (:=) or range weight (:/)
-            for pattern, range_mode in [(r'(.+?)\s*:=\s*(\d+)', False), 
-                                         (r'(.+?)\s*:/\s*(\d+)', True)]:
+            # Both use the same PyVSC syntax - vsc.weight(val, weight)
+            for pattern in [r'(.+?)\s*:=\s*(\d+)', r'(.+?)\s*:/\s*(\d+)']:
                 match = re.match(pattern, item)
                 if match:
                     val_part, weight = match.groups()
@@ -2673,8 +2686,7 @@ from typing import Optional'''
                     if rng_match:
                         low = self._qualify_enum_values(self._convert_numbers(rng_match.group(1).strip()))
                         high = self._qualify_enum_values(self._convert_numbers(rng_match.group(2).strip()))
-                        range_arg = ", 'range'" if range_mode else ""
-                        weights.append(f"vsc.weight(vsc.rng({low}, {high}), {weight}{range_arg})")
+                        weights.append(f"vsc.weight(vsc.rng({low}, {high}), {weight})")
                     else:
                         val = self._qualify_enum_values(self._convert_numbers(val_part.strip()))
                         weights.append(f"vsc.weight({val}, {weight})")
