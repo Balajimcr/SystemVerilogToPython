@@ -1,169 +1,252 @@
 // ============================================================================
-// ISP YUV → RGB Constraint Model (Solver-Stable, Range-Complete)
+// ISP YUV → RGB Configuration
+// Range-complete, solver-stable, HW-realistic
 // ============================================================================
 
-typedef enum int {
-    YUV_444 = 0,
-    YUV_422 = 1,
-    YUV_420 = 2
-} yuv_format_e;
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
 
-typedef enum int {
-    COMP_RGB = 0,
-    COMP_YUV = 1,
-    COMP_RAW = 2
-} comp_type_e;
-
-typedef enum int {
-    BIT_8  = 0,
-    BIT_10 = 1,
-    BIT_12 = 3
-} bit_depth_e;
+typedef enum int { YUV_444=0, YUV_422=1, YUV_420=2 } yuv_format_e;
+typedef enum int { PLANAR=0, SEMI_PLANAR=1, PACKED=2 } yuv_packing_e;
+typedef enum int { BT601=0, BT709=1, BT2020=2 } color_space_e;
+typedef enum int { FULL_RANGE=0, LIMITED_RANGE=1 } range_mode_e;
+typedef enum int { RGB_888=0, RGB_101010=1, RGB_121212=2 } rgb_format_e;
+typedef enum int { BIT_8=8, BIT_10=10, BIT_12=12 } bit_depth_e;
 
 
-// ============================================================================
-// Main Randomizable Configuration Class
-// ============================================================================
+// ---------------------------------------------------------------------------
+// CONFIGURATION CLASS
+// ---------------------------------------------------------------------------
 
-class isp_rand_item;
+class isp_yuv2rgb_cfg;
 
-    // ------------------------------------------------------------------------
-    // Primary selector fields
-    // ------------------------------------------------------------------------
-    rand bit            isp_bypass_mode;
-    rand yuv_format_e   isp_yuv_format;
-    rand comp_type_e    isp_src_comp;
-    rand comp_type_e    isp_dst_comp;
-    rand bit_depth_e    isp_in_bit_depth;
-    rand bit_depth_e    isp_out_bit_depth;
+    // -----------------------------------------------------------------------
+    // Core controls
+    // -----------------------------------------------------------------------
+    rand bit enable;
+    rand yuv_format_e yuv_format;
+    rand yuv_packing_e yuv_packing;
+    rand bit_depth_e yuv_bit_depth;
+    rand color_space_e color_space;
+    rand range_mode_e range_mode;
+    rand rgb_format_e rgb_format;
 
-    // ------------------------------------------------------------------------
-    // DMA / format selectors (previously unbounded → BUG)
-    // ------------------------------------------------------------------------
-    rand int unsigned   rdma_data_format;
-    rand int unsigned   wdma_data_format;
+    // -----------------------------------------------------------------------
+    // Geometry
+    // -----------------------------------------------------------------------
+    rand int unsigned width;
+    rand int unsigned height;
 
-    // ------------------------------------------------------------------------
-    // Signed grid parameters
-    // ------------------------------------------------------------------------
-    rand int signed     isp_grid_2d_0_0;
-    rand int signed     isp_grid_2d_0_1;
-    rand int signed     isp_grid_2d_0_2;
-    rand int signed     isp_grid_2d_0_3;
-    rand int signed     isp_grid_2d_0_4;
-    rand int signed     isp_grid_2d_0_6;
+    // -----------------------------------------------------------------------
+    // Feature enables
+    // -----------------------------------------------------------------------
+    rand bit chroma_enabled;
+    rand bit dither_enable;
+    rand bit clip_enable;
 
+    // -----------------------------------------------------------------------
+    // Matrix coefficients
+    // -----------------------------------------------------------------------
+    rand int signed c00;
+    rand int signed c01;
+    rand int signed c02;
+    rand int signed c10;
+    rand int signed c11;
+    rand int signed c12;
+    rand int signed c20;
+    rand int signed c21;
+    rand int signed c22;
 
-    // ========================================================================
-    // GLOBAL SOLVE ORDER (acyclic, selector-only)
-    // ========================================================================
-    constraint solve_order_c {
-        solve isp_bypass_mode  before isp_yuv_format;
-        solve isp_yuv_format   before isp_src_comp;
-        solve isp_src_comp     before isp_dst_comp;
-        solve isp_dst_comp     before isp_in_bit_depth;
-        solve isp_in_bit_depth before isp_out_bit_depth;
+    // -----------------------------------------------------------------------
+    // Offsets
+    // -----------------------------------------------------------------------
+    rand int signed y_offset;
+    rand int signed uv_offset;
+    rand int signed arith_y_offset;
+
+    // -----------------------------------------------------------------------
+    // Arithmetic / misc
+    // -----------------------------------------------------------------------
+    rand int signed a;
+    rand int signed b;
+    rand int signed c;
+    rand int signed d;
+    rand int signed x;
+    rand int signed y;
+    rand int signed z;
+    rand int signed w;
+
+    rand int unsigned arith_width;
+    rand int unsigned stride;
+    rand int unsigned fmt;
+    rand bit_depth_e bit_depth;
+    rand int signed signed_val;
+    rand int unsigned unsigned_val;
+    rand int unsigned mode;
+    rand int unsigned range;
+
+    // -----------------------------------------------------------------------
+    // RDMA / ISP
+    // -----------------------------------------------------------------------
+    rand int unsigned IsRdmaDataFormatYuv;
+    rand yuv_format_e IsYuvFormat;
+    rand int unsigned IsInBittageType;
+    rand int unsigned IsSrcCompType;
+    rand int unsigned IsInWidth;
+
+    // -----------------------------------------------------------------------
+    // Stride / SBWC
+    // -----------------------------------------------------------------------
+    rand int unsigned yuv_rdmaY_img_stride_1p;
+    rand bit yuv_rdmaY_sbwc_lossy_comp_mode;
+    rand bit yuv_rdmaY_comp_64B_align;
+
+    // -----------------------------------------------------------------------
+    // Packet / timing
+    // -----------------------------------------------------------------------
+    rand int unsigned ip_post_frame_gap;
+    rand int unsigned packet_size;
+    rand int unsigned delay_cycles;
+
+    // -----------------------------------------------------------------------
+    // Bypass / grid
+    // -----------------------------------------------------------------------
+    rand bit IsBypassMode;
+    rand bit IsGridMode;
+
+    // -----------------------------------------------------------------------
+    // ISP geometry
+    // -----------------------------------------------------------------------
+    rand int unsigned yuv_isp_image_crop_pre_x;
+    rand int unsigned yuv_isp_image_active_width;
+    rand int unsigned yuv_isp_out_scale_x;
+    rand int unsigned yuv_isp_crop_width;
+
+    // -----------------------------------------------------------------------
+    // GDC
+    // -----------------------------------------------------------------------
+    rand int signed yuv_isp_scale_y;
+    rand int signed yuv_isp_scale_shifter_y;
+    rand int unsigned yuv_isp_org_height;
+    rand int unsigned yuv_isp_image_active_height;
+
+    // =======================================================================
+    // BASIC RANGE CONSTRAINTS
+    // =======================================================================
+
+    constraint range_c {
+        enable inside {0,1};
+        chroma_enabled inside {0,1};
+        dither_enable inside {0,1};
+        clip_enable inside {0,1};
+
+        width inside {[64:16384]};
+        height inside {[64:16384]};
+        IsInWidth inside {[64:16384]};
+
+        arith_width inside {[1:16]};
+        stride inside {[1:65536]};
+        fmt inside {[0:15]};
+        mode inside {[0:7]};
+        range inside {[0:3]};
+
+        signed_val inside {[-32768:32767]};
+        unsigned_val inside {[0:255]};
+
+        ip_post_frame_gap inside {[0:1000]};
+        packet_size inside {[64:4096]};
+        delay_cycles inside {[0:100000]};
     }
 
+    // =======================================================================
+    // MATRIX / OFFSET CONSISTENCY
+    // =======================================================================
 
-    // ========================================================================
-    // ENUM / BIT RANGE CONSTRAINTS (explicit, redundant-safe)
-    // ========================================================================
-    constraint enum_ranges_c {
-        isp_bypass_mode inside {0,1};
+    constraint matrix_c {
+        c00 inside {[-1024:1024]};
+        c01 inside {[-1024:1024]};
+        c02 inside {[-1024:1024]};
+        c10 inside {[-1024:1024]};
+        c11 inside {[-1024:1024]};
+        c12 inside {[-1024:1024]};
+        c20 inside {[-1024:1024]};
+        c21 inside {[-1024:1024]};
+        c22 inside {[-1024:1024]};
 
-        isp_yuv_format inside {YUV_444, YUV_422, YUV_420};
-
-        isp_src_comp inside {COMP_RGB, COMP_YUV, COMP_RAW};
-        isp_dst_comp inside {COMP_RGB, COMP_YUV, COMP_RAW};
-
-        isp_in_bit_depth  inside {BIT_8, BIT_10, BIT_12};
-        isp_out_bit_depth inside {BIT_8, BIT_10, BIT_12};
+        y_offset inside {[-1024:1024]};
+        uv_offset inside {[-1024:1024]};
+        arith_y_offset inside {[-1024:1024]};
     }
 
+    // =======================================================================
+    // FORMAT / BIT-DEPTH COHERENCY
+    // =======================================================================
 
-    // ========================================================================
-    // DMA FORMAT RANGE CONSTRAINTS
-    // ========================================================================
-    constraint dma_format_range_c {
+    constraint format_c {
+        bit_depth inside {BIT_8, BIT_10, BIT_12};
+        yuv_bit_depth == bit_depth;
 
-        // RDMA formats supported by HW
-        rdma_data_format inside {
-            4, 5,
-            7, 8,
-            16, 17,
-            20, 21,
-            32, 33
-        };
-
-        // WDMA formats (kept generic but bounded)
-        wdma_data_format inside {[0:63]};
-    }
-
-
-    // ========================================================================
-    // RDMA → YUV FORMAT RELATION
-    // ========================================================================
-    constraint rdma_format_c {
-
-        if (rdma_data_format inside {4,5,16,17,20,21})
-            isp_yuv_format == YUV_444;
+        if (rgb_format == RGB_888)
+            bit_depth == BIT_8;
         else
-            isp_yuv_format inside {YUV_422, YUV_420};
+            bit_depth inside {BIT_10, BIT_12};
     }
 
+    // =======================================================================
+    // YUV FORMAT / PACKING RULES
+    // =======================================================================
 
-    // ========================================================================
-    // BYPASS MODE CONSTRAINTS
-    // ========================================================================
-    constraint bypass_mode_c {
-
-        if (isp_bypass_mode) {
-            isp_src_comp inside {COMP_RGB, COMP_YUV};
-            isp_dst_comp == isp_src_comp;
-        }
+    constraint packing_c {
+        if (yuv_format == YUV_420)
+            yuv_packing != PACKED;
     }
 
+    // =======================================================================
+    // STRIDE & ALIGNMENT
+    // =======================================================================
 
-    // ========================================================================
-    // INPUT BIT-DEPTH DERIVATION FROM RDMA FORMAT
-    // ========================================================================
-    constraint input_bit_depth_c {
+    constraint stride_c {
+        stride % 16 == 0;
 
-        if (rdma_data_format inside {4,5,7,8})
-            isp_in_bit_depth == BIT_8;
-        else if (rdma_data_format inside {16,17,32,33})
-            isp_in_bit_depth == BIT_10;
+        if (yuv_rdmaY_comp_64B_align)
+            stride % 64 == 0;
+    }
+
+    // =======================================================================
+    // RDMA → ISP RELATION
+    // =======================================================================
+
+    constraint rdma_c {
+        IsRdmaDataFormatYuv inside {4,5,7,8,16,17,20,21,32,33};
+        IsYuvFormat == yuv_format;
+
+        if (IsRdmaDataFormatYuv inside {4,5,7,8})
+            IsInBittageType == 0;
+        else if (IsRdmaDataFormatYuv inside {16,17,32,33})
+            IsInBittageType == 1;
         else
-            isp_in_bit_depth == BIT_12;
+            IsInBittageType == 3;
     }
 
+    // =======================================================================
+    // GEOMETRY RELATIONS
+    // =======================================================================
 
-    // ========================================================================
-    // OUTPUT BIT-DEPTH RULES
-    // ========================================================================
-    constraint output_bit_depth_c {
-
-        if (isp_in_bit_depth == BIT_8)
-            isp_out_bit_depth == BIT_8;
-        else if (isp_dst_comp != COMP_RGB)
-            isp_out_bit_depth == BIT_10;
-        else
-            isp_out_bit_depth inside {BIT_10, BIT_12};
+    constraint geometry_c {
+        yuv_isp_image_active_width <= width;
+        yuv_isp_crop_width <= yuv_isp_image_active_width;
+        yuv_isp_image_crop_pre_x + yuv_isp_crop_width <= width;
     }
 
+    // =======================================================================
+    // GDC CONSISTENCY
+    // =======================================================================
 
-    // ========================================================================
-    // SIGNED GRID RANGE CONSTRAINTS
-    // ========================================================================
-    constraint grid_range_c {
-
-        isp_grid_2d_0_0 inside {[-1024:1023]};
-        isp_grid_2d_0_1 inside {[-1024:1023]};
-        isp_grid_2d_0_2 inside {[-512:511]};
-        isp_grid_2d_0_3 inside {[-512:511]};
-        isp_grid_2d_0_4 inside {-100, -50, 0, 50, 100};
-        isp_grid_2d_0_6 inside {[-2048:2047]};
+    constraint isp_c {
+        yuv_isp_scale_y inside {[-8192:8191]};
+        yuv_isp_scale_shifter_y inside {[0:15]};
+        yuv_isp_image_active_height <= yuv_isp_org_height;
     }
 
 endclass

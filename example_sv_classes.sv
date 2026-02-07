@@ -509,20 +509,20 @@ class isp_yuv2rgb_cfg;
     // LITERAL MULTIPLIED BY EXPRESSION (3*(expr) needs vsc.unsigned(3))
     // ========================================================================
 
-    rand int yuv_gdc_scale_y;
-    rand int yuv_gdc_scale_shifter_y;
-    rand int yuv_gdc_org_height;
-    rand int yuv_gdc_image_active_height;
+    rand int yuv_isp_scale_y;
+    rand int yuv_isp_scale_shifter_y;
+    rand int yuv_isp_org_height;
+    rand int yuv_isp_image_active_height;
 
     constraint cr_literal_times_expr {
         if (IsGridMode == 0) {
-            yuv_gdc_scale_y == ((3*(1<<(20+yuv_gdc_scale_shifter_y))+yuv_gdc_org_height/2)/yuv_gdc_org_height);
+            yuv_isp_scale_y == ((3*(1<<(20+yuv_isp_scale_shifter_y))+yuv_isp_org_height/2)/yuv_isp_org_height);
         } else {
-            yuv_gdc_scale_y == ((3*(1<<(20+yuv_gdc_scale_shifter_y))+yuv_gdc_image_active_height/2)/yuv_gdc_image_active_height);
+            yuv_isp_scale_y == ((3*(1<<(20+yuv_isp_scale_shifter_y))+yuv_isp_image_active_height/2)/yuv_isp_image_active_height);
         }
-        solve yuv_gdc_org_height before yuv_gdc_scale_y;
-        solve yuv_gdc_image_active_height before yuv_gdc_scale_y;
-        solve yuv_gdc_scale_shifter_y before yuv_gdc_scale_y;
+        solve yuv_isp_org_height before yuv_isp_scale_y;
+        solve yuv_isp_image_active_height before yuv_isp_scale_y;
+        solve yuv_isp_scale_shifter_y before yuv_isp_scale_y;
     }
 
     constraint cr_literal_times_paren {

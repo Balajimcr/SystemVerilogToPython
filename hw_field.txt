@@ -3,35 +3,35 @@
 # Format: field_name default_value
 # Lines starting with # are comments
 #
-# Generated from IspYuv2rgbCfg PyVSC model
+# Generated for isp_yuv2rgb_cfg (solver-stable defaults)
 # ============================================================================
 
 # ---------------------------------------------------------------------------
-# Core ISP Controls
+# Core controls
 # ---------------------------------------------------------------------------
-enable 0                # 0 = disabled, 1 = enabled
-yuv_format 0            # YuvFormat enum (0=YUV_444, 1=YUV_422, 2=YUV_420)
-yuv_packing 0           # YuvPacking enum (0=PLANAR, 1=SEMI_PLANAR, 2=PACKED)
-yuv_bit_depth 8         # BitDepth enum (8, 10, 12)
-color_space 0           # ColorSpace enum (0=BT601, 1=BT709, 2=BT2020)
-range_mode 0            # RangeMode enum (0=FULL_RANGE, 1=LIMITED_RANGE)
-rgb_format 0            # RgbFormat enum (0=RGB_888, 1=RGB_101010, 2=RGB_121212)
+enable 0
+yuv_format 0            # YUV_444
+yuv_packing 0           # PLANAR
+yuv_bit_depth 8         # BIT_8
+color_space 0           # BT601
+range_mode 0            # FULL_RANGE
+rgb_format 0            # RGB_888
 
 # ---------------------------------------------------------------------------
-# Image Dimensions
+# Geometry
 # ---------------------------------------------------------------------------
-width 1920              # Image width (64-16384)
-height 1080             # Image height (64-16384)
+width 1920
+height 1080
 
 # ---------------------------------------------------------------------------
-# Feature Enables
+# Feature enables
 # ---------------------------------------------------------------------------
-chroma_enabled 0        # Chroma processing enable
-dither_enable 0         # Dithering enable
-clip_enable 0           # Clipping enable
+chroma_enabled 0
+dither_enable 0
+clip_enable 0
 
 # ---------------------------------------------------------------------------
-# Color Matrix Coefficients (c00-c22)
+# Matrix coefficients (identity-like, BT.601 safe)
 # ---------------------------------------------------------------------------
 c00 298
 c01 0
@@ -51,7 +51,7 @@ uv_offset 0
 arith_y_offset 0
 
 # ---------------------------------------------------------------------------
-# General Parameters
+# Arithmetic / misc
 # ---------------------------------------------------------------------------
 a 0
 b 0
@@ -61,46 +61,47 @@ x 0
 y 0
 z 0
 w 0
+
 arith_width 1
-stride 1
+stride 1920              # 16B aligned
 fmt 0
-bit_depth 8
+bit_depth 8              # BIT_8
 signed_val 0
 unsigned_val 128
 mode 0
 range 0
 
 # ---------------------------------------------------------------------------
-# RDMA Data Format Parameters
+# RDMA / ISP
 # ---------------------------------------------------------------------------
-IsRdmaDataFormatYuv 4
-IsYuvFormat 0
-IsInBittageType 0
+IsRdmaDataFormatYuv 4    # Maps to YUV_444, BIT_8
+IsYuvFormat 0            # YUV_444
+IsInBittageType 0        # 0 = 8-bit
 IsSrcCompType 0
 IsInWidth 1920
 
 # ---------------------------------------------------------------------------
-# Stride Calculation Parameters
+# Stride / SBWC
 # ---------------------------------------------------------------------------
-yuv_rdmaY_img_stride_1p 0
+yuv_rdmaY_img_stride_1p 1920
 yuv_rdmaY_sbwc_lossy_comp_mode 0
 yuv_rdmaY_comp_64B_align 0
 
 # ---------------------------------------------------------------------------
-# Frame Gap / Packet Parameters
+# Packet / timing
 # ---------------------------------------------------------------------------
 ip_post_frame_gap 100
 packet_size 256
 delay_cycles 0
 
 # ---------------------------------------------------------------------------
-# Bypass and Grid Mode
+# Bypass / grid
 # ---------------------------------------------------------------------------
 IsBypassMode 0
 IsGridMode 0
 
 # ---------------------------------------------------------------------------
-# ISP Image Processing Parameters
+# ISP geometry
 # ---------------------------------------------------------------------------
 yuv_isp_image_crop_pre_x 0
 yuv_isp_image_active_width 1920
@@ -108,9 +109,9 @@ yuv_isp_out_scale_x 8192
 yuv_isp_crop_width 1920
 
 # ---------------------------------------------------------------------------
-# GDC Scale Parameters
+# GDC
 # ---------------------------------------------------------------------------
-yuv_gdc_scale_y 0
-yuv_gdc_scale_shifter_y 0
-yuv_gdc_org_height 1080
-yuv_gdc_image_active_height 1080
+yuv_isp_scale_y 0
+yuv_isp_scale_shifter_y 0
+yuv_isp_org_height 1080
+yuv_isp_image_active_height 1080

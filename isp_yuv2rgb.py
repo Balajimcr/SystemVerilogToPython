@@ -23,99 +23,179 @@ class YuvFormat(IntEnum):
   YUV_422 = 1
   YUV_420 = 2
 
-class CompType(IntEnum):
-  """Translated from SV enum: comp_type_e"""
-  COMP_RGB = 0
-  COMP_YUV = 1
-  COMP_RAW = 2
+class YuvPacking(IntEnum):
+  """Translated from SV enum: yuv_packing_e"""
+  PLANAR = 0
+  SEMI_PLANAR = 1
+  PACKED = 2
+
+class ColorSpace(IntEnum):
+  """Translated from SV enum: color_space_e"""
+  BT601 = 0
+  BT709 = 1
+  BT2020 = 2
+
+class RangeMode(IntEnum):
+  """Translated from SV enum: range_mode_e"""
+  FULL_RANGE = 0
+  LIMITED_RANGE = 1
+
+class RgbFormat(IntEnum):
+  """Translated from SV enum: rgb_format_e"""
+  RGB_888 = 0
+  RGB_101010 = 1
+  RGB_121212 = 2
 
 class BitDepth(IntEnum):
   """Translated from SV enum: bit_depth_e"""
-  BIT_8 = 0
-  BIT_10 = 1
-  BIT_12 = 3
+  BIT_8 = 8
+  BIT_10 = 10
+  BIT_12 = 12
 
 @vsc.randobj
-class IspRandItem:
-  """Translated from SV class: isp_rand_item"""
+class IspYuv2rgbCfg:
+  """Translated from SV class: isp_yuv2rgb_cfg"""
 
   def __init__(self):
-    self.isp_bypass_mode = vsc.rand_bit_t(1)
-    self.isp_yuv_format = vsc.rand_enum_t(YuvFormat)
-    self.isp_src_comp = vsc.rand_enum_t(CompType)
-    self.isp_dst_comp = vsc.rand_enum_t(CompType)
-    self.isp_in_bit_depth = vsc.rand_enum_t(BitDepth)
-    self.isp_out_bit_depth = vsc.rand_enum_t(BitDepth)
-    self.rdma_data_format = vsc.rand_uint32_t()
-    self.wdma_data_format = vsc.rand_uint32_t()
-    self.isp_grid_2d_0_0 = vsc.rand_int32_t()
-    self.isp_grid_2d_0_1 = vsc.rand_int32_t()
-    self.isp_grid_2d_0_2 = vsc.rand_int32_t()
-    self.isp_grid_2d_0_3 = vsc.rand_int32_t()
-    self.isp_grid_2d_0_4 = vsc.rand_int32_t()
-    self.isp_grid_2d_0_6 = vsc.rand_int32_t()
+    self.enable = vsc.rand_bit_t(1)
+    self.yuv_format = vsc.rand_enum_t(YuvFormat)
+    self.yuv_packing = vsc.rand_enum_t(YuvPacking)
+    self.yuv_bit_depth = vsc.rand_enum_t(BitDepth)
+    self.color_space = vsc.rand_enum_t(ColorSpace)
+    self.range_mode = vsc.rand_enum_t(RangeMode)
+    self.rgb_format = vsc.rand_enum_t(RgbFormat)
+    self.width = vsc.rand_uint32_t()
+    self.height = vsc.rand_uint32_t()
+    self.chroma_enabled = vsc.rand_bit_t(1)
+    self.dither_enable = vsc.rand_bit_t(1)
+    self.clip_enable = vsc.rand_bit_t(1)
+    self.c00 = vsc.rand_int32_t()
+    self.c01 = vsc.rand_int32_t()
+    self.c02 = vsc.rand_int32_t()
+    self.c10 = vsc.rand_int32_t()
+    self.c11 = vsc.rand_int32_t()
+    self.c12 = vsc.rand_int32_t()
+    self.c20 = vsc.rand_int32_t()
+    self.c21 = vsc.rand_int32_t()
+    self.c22 = vsc.rand_int32_t()
+    self.y_offset = vsc.rand_int32_t()
+    self.uv_offset = vsc.rand_int32_t()
+    self.arith_y_offset = vsc.rand_int32_t()
+    self.a = vsc.rand_int32_t()
+    self.b = vsc.rand_int32_t()
+    self.c = vsc.rand_int32_t()
+    self.d = vsc.rand_int32_t()
+    self.x = vsc.rand_int32_t()
+    self.y = vsc.rand_int32_t()
+    self.z = vsc.rand_int32_t()
+    self.w = vsc.rand_int32_t()
+    self.arith_width = vsc.rand_uint32_t()
+    self.stride = vsc.rand_uint32_t()
+    self.fmt = vsc.rand_uint32_t()
+    self.bit_depth = vsc.rand_enum_t(BitDepth)
+    self.signed_val = vsc.rand_int32_t()
+    self.unsigned_val = vsc.rand_uint32_t()
+    self.mode = vsc.rand_uint32_t()
+    self.range = vsc.rand_uint32_t()
+    self.IsRdmaDataFormatYuv = vsc.rand_uint32_t()
+    self.IsYuvFormat = vsc.rand_enum_t(YuvFormat)
+    self.IsInBittageType = vsc.rand_uint32_t()
+    self.IsSrcCompType = vsc.rand_uint32_t()
+    self.IsInWidth = vsc.rand_uint32_t()
+    self.yuv_rdmaY_img_stride_1p = vsc.rand_uint32_t()
+    self.yuv_rdmaY_sbwc_lossy_comp_mode = vsc.rand_bit_t(1)
+    self.yuv_rdmaY_comp_64B_align = vsc.rand_bit_t(1)
+    self.ip_post_frame_gap = vsc.rand_uint32_t()
+    self.packet_size = vsc.rand_uint32_t()
+    self.delay_cycles = vsc.rand_uint32_t()
+    self.IsBypassMode = vsc.rand_bit_t(1)
+    self.IsGridMode = vsc.rand_bit_t(1)
+    self.yuv_isp_image_crop_pre_x = vsc.rand_uint32_t()
+    self.yuv_isp_image_active_width = vsc.rand_uint32_t()
+    self.yuv_isp_out_scale_x = vsc.rand_uint32_t()
+    self.yuv_isp_crop_width = vsc.rand_uint32_t()
+    self.yuv_isp_scale_y = vsc.rand_int32_t()
+    self.yuv_isp_scale_shifter_y = vsc.rand_int32_t()
+    self.yuv_isp_org_height = vsc.rand_uint32_t()
+    self.yuv_isp_image_active_height = vsc.rand_uint32_t()
 
   @vsc.constraint
-  def solve_order_c(self):
-    vsc.solve_order(self.isp_bypass_mode, self.isp_yuv_format)
-    vsc.solve_order(self.isp_yuv_format, self.isp_src_comp)
-    vsc.solve_order(self.isp_src_comp, self.isp_dst_comp)
-    vsc.solve_order(self.isp_dst_comp, self.isp_in_bit_depth)
-    vsc.solve_order(self.isp_in_bit_depth, self.isp_out_bit_depth)
+  def range_c(self):
+    self.enable in vsc.rangelist(0, 1)
+    self.chroma_enabled in vsc.rangelist(0, 1)
+    self.dither_enable in vsc.rangelist(0, 1)
+    self.clip_enable in vsc.rangelist(0, 1)
+    self.width in vsc.rangelist(vsc.rng(64, 16384))
+    self.height in vsc.rangelist(vsc.rng(64, 16384))
+    self.IsInWidth in vsc.rangelist(vsc.rng(64, 16384))
+    self.arith_width in vsc.rangelist(vsc.rng(1, 16))
+    self.stride in vsc.rangelist(vsc.rng(1, 65536))
+    self.fmt in vsc.rangelist(vsc.rng(0, 15))
+    self.mode in vsc.rangelist(vsc.rng(0, 7))
+    self.range in vsc.rangelist(vsc.rng(0, 3))
+    self.signed_val in vsc.rangelist(vsc.rng(-32768, 32767))
+    self.unsigned_val in vsc.rangelist(vsc.rng(0, 255))
+    self.ip_post_frame_gap in vsc.rangelist(vsc.rng(0, 1000))
+    self.packet_size in vsc.rangelist(vsc.rng(64, 4096))
+    self.delay_cycles in vsc.rangelist(vsc.rng(0, 100000))
 
   @vsc.constraint
-  def enum_ranges_c(self):
-    self.isp_bypass_mode in vsc.rangelist(0, 1)
-    self.isp_yuv_format in vsc.rangelist(YuvFormat.YUV_444, YuvFormat.YUV_422, YuvFormat.YUV_420)
-    self.isp_src_comp in vsc.rangelist(CompType.COMP_RGB, CompType.COMP_YUV, CompType.COMP_RAW)
-    self.isp_dst_comp in vsc.rangelist(CompType.COMP_RGB, CompType.COMP_YUV, CompType.COMP_RAW)
-    self.isp_in_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10, BitDepth.BIT_12)
-    self.isp_out_bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10, BitDepth.BIT_12)
+  def matrix_c(self):
+    self.c00 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c01 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c02 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c10 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c11 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c12 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c20 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c21 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.c22 in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.y_offset in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.uv_offset in vsc.rangelist(vsc.rng(-1024, 1024))
+    self.arith_y_offset in vsc.rangelist(vsc.rng(-1024, 1024))
 
   @vsc.constraint
-  def dma_format_range_c(self):
-    self.rdma_data_format in vsc.rangelist(4, 5, 7, 8, 16, 17, 20, 21, 32, 33)
-    self.wdma_data_format in vsc.rangelist(vsc.rng(0, 63))
-
-  @vsc.constraint
-  def rdma_format_c(self):
-    with vsc.if_then(self.rdma_data_format.inside(vsc.rangelist(4, 5, 16, 17, 20, 21))):
-      self.isp_yuv_format == YuvFormat.YUV_444
+  def format_c(self):
+    self.bit_depth in vsc.rangelist(BitDepth.BIT_8, BitDepth.BIT_10, BitDepth.BIT_12)
+    self.yuv_bit_depth == self.bit_depth
+    with vsc.if_then(self.rgb_format == RgbFormat.RGB_888):
+      self.bit_depth == BitDepth.BIT_8
     with vsc.else_then:
-      self.isp_yuv_format in vsc.rangelist(YuvFormat.YUV_422, YuvFormat.YUV_420)
+      self.bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
 
   @vsc.constraint
-  def bypass_mode_c(self):
-    with vsc.if_then((self.isp_bypass_mode != 0)):
-      self.isp_src_comp in vsc.rangelist(CompType.COMP_RGB, CompType.COMP_YUV)
-      self.isp_dst_comp == self.isp_src_comp
+  def packing_c(self):
+    with vsc.if_then(self.yuv_format == YuvFormat.YUV_420):
+      self.yuv_packing != YuvPacking.PACKED
 
   @vsc.constraint
-  def input_bit_depth_c(self):
-    with vsc.if_then(self.rdma_data_format.inside(vsc.rangelist(4, 5, 7, 8))):
-      self.isp_in_bit_depth == BitDepth.BIT_8
-    with vsc.else_if(self.rdma_data_format.inside(vsc.rangelist(16, 17, 32, 33))):
-      self.isp_in_bit_depth == BitDepth.BIT_10
+  def stride_c(self):
+    self.stride % 16 == 0
+    with vsc.if_then((self.yuv_rdmaY_comp_64B_align != 0)):
+      self.stride % 64 == 0
+
+  @vsc.constraint
+  def rdma_c(self):
+    self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8, 16, 17, 20, 21, 32, 33)
+    self.IsYuvFormat == self.yuv_format
+    with vsc.if_then(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5, 7, 8))):
+      self.IsInBittageType == 0
+    with vsc.else_if(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(16, 17, 32, 33))):
+      self.IsInBittageType == 1
     with vsc.else_then:
-      self.isp_in_bit_depth == BitDepth.BIT_12
+      self.IsInBittageType == 3
 
   @vsc.constraint
-  def output_bit_depth_c(self):
-    with vsc.if_then(self.isp_in_bit_depth == BitDepth.BIT_8):
-      self.isp_out_bit_depth == BitDepth.BIT_8
-    with vsc.else_if(self.isp_dst_comp != CompType.COMP_RGB):
-      self.isp_out_bit_depth == BitDepth.BIT_10
-    with vsc.else_then:
-      self.isp_out_bit_depth in vsc.rangelist(BitDepth.BIT_10, BitDepth.BIT_12)
+  def geometry_c(self):
+    self.yuv_isp_image_active_width <= self.width
+    self.yuv_isp_crop_width <= self.yuv_isp_image_active_width
+    self.yuv_isp_image_crop_pre_x + self.yuv_isp_crop_width <= self.width
 
   @vsc.constraint
-  def grid_range_c(self):
-    self.isp_grid_2d_0_0 in vsc.rangelist(vsc.rng(-1024, 1023))
-    self.isp_grid_2d_0_1 in vsc.rangelist(vsc.rng(-1024, 1023))
-    self.isp_grid_2d_0_2 in vsc.rangelist(vsc.rng(-512, 511))
-    self.isp_grid_2d_0_3 in vsc.rangelist(vsc.rng(-512, 511))
-    self.isp_grid_2d_0_4 in vsc.rangelist(-100, -50, 0, 50, 100)
-    self.isp_grid_2d_0_6 in vsc.rangelist(vsc.rng(-2048, 2047))
+  def isp_c(self):
+    self.yuv_isp_scale_y in vsc.rangelist(vsc.rng(-8192, 8191))
+    self.yuv_isp_scale_shifter_y in vsc.rangelist(vsc.rng(0, 15))
+    self.yuv_isp_image_active_height <= self.yuv_isp_org_height
 
 # =============================================================================
 # USAGE EXAMPLE
@@ -125,20 +205,20 @@ if __name__ == '__main__':
   # Set seed for reproducibility (optional)
   # vsc.set_randstate(12345)
 
-  # Create and randomize IspRandItem
-  isp_rand_item = IspRandItem()
-  isp_rand_item_randomized = False
+  # Create and randomize IspYuv2rgbCfg
+  isp_yuv2rgb_cfg = IspYuv2rgbCfg()
+  isp_yuv2rgb_cfg_randomized = False
   try:
-    isp_rand_item.randomize()
-    isp_rand_item_randomized = True
-    print(f'IspRandItem randomized successfully')
+    isp_yuv2rgb_cfg.randomize()
+    isp_yuv2rgb_cfg_randomized = True
+    print(f'IspYuv2rgbCfg randomized successfully')
   except Exception as e:
-    print(f'IspRandItem randomize failed: {e}')
+    print(f'IspYuv2rgbCfg randomize failed: {e}')
 
-  if isp_rand_item_randomized:
+  if isp_yuv2rgb_cfg_randomized:
     # Print field values
-    print(f'  isp_bypass_mode = {isp_rand_item.isp_bypass_mode}')
-    print(f'  isp_yuv_format = {isp_rand_item.isp_yuv_format}')
-    print(f'  isp_src_comp = {isp_rand_item.isp_src_comp}')
-    print(f'  isp_dst_comp = {isp_rand_item.isp_dst_comp}')
-    print(f'  isp_in_bit_depth = {isp_rand_item.isp_in_bit_depth}')
+    print(f'  enable = {isp_yuv2rgb_cfg.enable}')
+    print(f'  yuv_format = {isp_yuv2rgb_cfg.yuv_format}')
+    print(f'  yuv_packing = {isp_yuv2rgb_cfg.yuv_packing}')
+    print(f'  yuv_bit_depth = {isp_yuv2rgb_cfg.yuv_bit_depth}')
+    print(f'  color_space = {isp_yuv2rgb_cfg.color_space}')
