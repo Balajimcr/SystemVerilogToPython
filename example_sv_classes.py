@@ -108,6 +108,12 @@ class IspYuv2rgbCfg:
     self.ip_post_frame_gap = vsc.rand_int32_t()
     self.packet_size = vsc.rand_int32_t()
     self.delay_cycles = vsc.rand_int32_t()
+    self.IsBypassMode = vsc.rand_int32_t()
+    self.IsGridMode = vsc.rand_int32_t()
+    self.yuv_isp_image_crop_pre_x = vsc.rand_int32_t()
+    self.yuv_isp_image_active_width = vsc.rand_int32_t()
+    self.yuv_isp_out_scale_x = vsc.rand_int32_t()
+    self.yuv_isp_crop_width = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -417,6 +423,33 @@ class IspYuv2rgbCfg:
       vsc.weight(1, 30),
       vsc.weight(vsc.rng(2, 10), 20),
     ])
+
+  @vsc.constraint
+  def cr_literal_subtract(self):
+    self.yuv_isp_image_crop_pre_x <= vsc.unsigned(16384) - self.yuv_isp_image_active_width
+
+  @vsc.constraint
+  def cr_literal_add(self):
+    self.x <= vsc.unsigned(1000) + self.y
+
+  @vsc.constraint
+  def cr_literal_multiply(self):
+    self.z == vsc.unsigned(10) * self.w
+
+  @vsc.constraint
+  def cr_nested_arithmetic(self):
+    vsc.solve_order(self.IsBypassMode, self.yuv_isp_image_crop_pre_x)
+    vsc.solve_order(self.yuv_isp_crop_width, self.yuv_isp_image_crop_pre_x)
+    vsc.solve_order(self.yuv_isp_image_active_width, self.yuv_isp_image_crop_pre_x)
+    vsc.solve_order(self.yuv_isp_out_scale_x, self.yuv_isp_image_crop_pre_x)
+    with vsc.if_then((self.IsBypassMode != 0)):
+      self.yuv_isp_image_crop_pre_x == 0
+    with vsc.else_then:
+      with vsc.if_then(self.IsGridMode == 0):
+        (self.yuv_isp_image_crop_pre_x + self.yuv_isp_image_active_width)*self.yuv_isp_out_scale_x//8192 <= (self.yuv_isp_crop_width)
+      with vsc.else_then:
+        (self.yuv_isp_image_crop_pre_x + self.yuv_isp_image_active_width*self.yuv_isp_out_scale_x//8192) <= (self.yuv_isp_crop_width)
+      self.yuv_isp_image_crop_pre_x <= vsc.unsigned(16384) - self.yuv_isp_image_active_width
 
 # =============================================================================
 # USAGE EXAMPLE

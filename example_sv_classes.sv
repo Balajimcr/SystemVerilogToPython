@@ -465,4 +465,44 @@ class isp_yuv2rgb_cfg;
         delay_cycles dist { 0:=50, 1:=30, [2:10]:/20 };
     }
 
+    // ========================================================================
+    // LITERAL ON LEFT SIDE OF ARITHMETIC (PyVSC needs vsc.unsigned wrapper)
+    // ========================================================================
+
+    rand int IsBypassMode;
+    rand int IsGridMode;
+    rand int yuv_isp_image_crop_pre_x;
+    rand int yuv_isp_image_active_width;
+    rand int yuv_isp_out_scale_x;
+    rand int yuv_isp_crop_width;
+
+    constraint cr_literal_subtract {
+        yuv_isp_image_crop_pre_x <= 16384 - yuv_isp_image_active_width;
+    }
+
+    constraint cr_literal_add {
+        x <= 1000 + y;
+    }
+
+    constraint cr_literal_multiply {
+        z == 10 * w;
+    }
+
+    constraint cr_nested_arithmetic {
+        if (IsBypassMode) {
+            yuv_isp_image_crop_pre_x == 0;
+        } else {
+            if (IsGridMode == 0) {
+                (yuv_isp_image_crop_pre_x + yuv_isp_image_active_width)*yuv_isp_out_scale_x/8192 <= (yuv_isp_crop_width);
+            } else {
+                (yuv_isp_image_crop_pre_x + yuv_isp_image_active_width*yuv_isp_out_scale_x/8192) <= (yuv_isp_crop_width);
+            }
+            yuv_isp_image_crop_pre_x <= 16384 - yuv_isp_image_active_width;
+        }
+        solve IsBypassMode before yuv_isp_image_crop_pre_x;
+        solve yuv_isp_crop_width before yuv_isp_image_crop_pre_x;
+        solve yuv_isp_image_active_width before yuv_isp_image_crop_pre_x;
+        solve yuv_isp_out_scale_x before yuv_isp_image_crop_pre_x;
+    }
+
 endclass
