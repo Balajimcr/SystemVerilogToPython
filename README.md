@@ -1,7 +1,7 @@
 # SV-to-PyVSC Translation Assistant
 
 [![Python Tests](https://github.com/balajimcr/SystemVerilogToPython/actions/workflows/python-tests.yml/badge.svg)](https://github.com/balajimcr/SystemVerilogToPython/actions/workflows/python-tests.yml)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Python tool that assists with manual translation of SystemVerilog constraint-based randomization models to PyVSC (Python Verification Stimulus and Coverage).
@@ -16,7 +16,7 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 - **Generates PyVSC code** with proper decorators and type mappings
 - **Translates constraint constructs**:
   - `rand`/`randc` fields with proper type mapping
-  - `inside` range constraints → `vsc.rangelist()`
+  - `inside` range constraints → `vsc.rangelist()` (expression form uses `.inside()`)
   - Range constraints (`var >= min && var <= max`) → grouped into `parameter_range` constraint
   - Conditional constraints (`if/else/begin/end`) → `vsc.if_then/else_if/else_then`
   - Weighted distributions (`dist`) → `vsc.dist()`
@@ -33,6 +33,8 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 - **Verbose mode (-r)** - includes original SV code and metrics in docstrings
 - **Flags items requiring manual review**
 - **Provides translation report** with statistics and warnings
+- **Multi-threaded translation** (file-level and class-level)
+- **Progress bars** for file/class translation (via `tqdm`)
 
 ## Installation
 
@@ -41,8 +43,8 @@ This is a **Translation Assistant**, not an automated converter. The generated c
 git clone https://github.com/balajimcr/SystemVerilogToPython.git
 cd SystemVerilogToPython
 
-# Install pyvsc (required for running generated code)
-pip install pyvsc
+# Install dependencies (pyvsc + tqdm)
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -56,12 +58,22 @@ python sv_to_pyvsc.py input.sv -o output.py
 # With translation report and verbose output (includes original SV in docstrings)
 python sv_to_pyvsc.py input.sv -o output.py -r
 
-# Output to stdout
-python sv_to_pyvsc.py input.sv
+# Translate all .sv files in a directory (writes .py next to each input)
+python sv_to_pyvsc.py path/to/sv_dir
 
-# Quiet mode (suppress stdout, just save file)
-python sv_to_pyvsc.py input.sv -o output.py -q
+# Translate a glob pattern
+python sv_to_pyvsc.py "sv_files/*.sv" -o out_dir
+
+# Multi-threaded translation with progress bar
+python sv_to_pyvsc.py path/to/sv_dir --jobs 8 --progress
+
+# Class-level parallelism within a single file
+python sv_to_pyvsc.py input.sv --class-jobs 8 --progress
 ```
+
+Notes:
+- `--progress` uses `tqdm`. Disable with `--no-progress` if you don't want a bar.
+- When translating multiple files, `-o` must be a directory.
 
 ### Python API
 
@@ -71,8 +83,8 @@ from sv_to_pyvsc import SVtoPyVSCTranslator
 # Create translator (verbose=True to include original SV in output)
 translator = SVtoPyVSCTranslator(verbose=False)
 
-# Translate from file
-result = translator.translate_file('input.sv', 'output.py')
+# Translate from file (optional parallelism + progress)
+result = translator.translate_file('input.sv', 'output.py', jobs=4, progress=True)
 
 # Or translate from string
 sv_code = '''
@@ -182,12 +194,12 @@ self.mode = vsc.rand_enum_t(Mode)
 
 | SystemVerilog | Meaning | PyVSC Equivalent | Notes |
 |---------------|---------|------------------|-------|
-| `&&` | Logical AND | `and` | Python boolean operator |
-| `\|\|` | Logical OR | `or` | Python boolean operator |
+| `&&` | Logical AND | `&` | PyVSC requires bitwise operators |
+| `\|\|` | Logical OR | `\|` | PyVSC requires bitwise operators |
 | `!a` | Logical NOT | `~a` | Use parentheses for safety |
 | `/` | Integer Division | `//` | **Critical**: SV `/` is integer div |
-| `!(a && b)` | NOT (AND) | `~(a and b)` | Exact semantic match |
-| `!(a \|\| b)` | NOT (OR) | `~(a or b)` | Exact semantic match |
+| `!(a && b)` | NOT (AND) | `~(a & b)` | Exact semantic match |
+| `!(a \|\| b)` | NOT (OR) | `~(a \| b)` | Exact semantic match |
 
 ### 7. Constraint Constructs
 
@@ -196,6 +208,7 @@ self.mode = vsc.rand_enum_t(Mode)
 | `var >= min && var <= max` | `var in vsc.rangelist(vsc.rng(min, max))` |
 | `inside {[a:b]}` | `x in vsc.rangelist(vsc.rng(a, b))` |
 | `inside {v1, v2}` | `x in vsc.rangelist(v1, v2)` |
+| `inside` (expression context) | `x.inside(vsc.rangelist(...))` |
 | `!(x inside {...})` | `vsc.not_inside(x, vsc.rangelist(...))` |
 | `A -> B` | `with vsc.implies(A): B` (Simple expressions only) |
 | `if (c) {...}` | `with vsc.if_then(c): ...` |
@@ -222,13 +235,30 @@ self.mode = vsc.rand_enum_t(Mode)
 - ✅ Enums → Python `IntEnum` + `rand_enum_t`
 - ✅ Arrays → `rand_list_t(inner_type)`
 - ✅ Prefer standard widths (8/16/32/64) when possible
-- ✅ `&&` → `and`, `||` → `or`, `!` → `~`
+- ✅ `&&` → `&`, `||` → `|`, `!` → `~`
 - ✅ `a / b` → `a // b` (Integer division)
 
 ### Constraint Ordering
 
 - `vsc.solve_order()` statements are automatically placed at the beginning of each constraint
 - The relative order of solve_order statements is preserved from the original SV
+
+## Recent Fixes
+
+All listed cases now generate correct PyVSC code:
+- `cr_inside_if`: inside in `if_then` uses `.inside()` ✅
+- `cr_inside_else_if`: inside in both `if_then` and `else_if` uses `.inside()` ✅
+- `cr_negation`: `!(a == 0)` converts to `(a != 0)` ✅
+- `cr_implication_inside_antecedent`: inside in `implies` uses `.inside()` ✅
+
+Summary of fixes applied:
+
+| SystemVerilog Pattern | Previous (broken) | Fixed PyVSC |
+|---|---|---|
+| `if (x inside {...})` | `x in vsc.rangelist()` | `x.inside(vsc.rangelist())` |
+| `!(a == b)` | `~(a == b)` | `(a != b)` |
+| `!(a > b)` | `~(a > b)` | `(a <= b)` |
+| `!var` | `~var` | `(var == 0)` |
 
 ## Example
 
@@ -288,8 +318,8 @@ class AxiTransaction:
 
 1. **Complex nested conditionals** - May need restructuring
 2. **Complex Implications** - `->` works for simple expressions; blocks `{}` require manual conversion
-3. **Enum references in distributions** - Need proper enum class prefix
-4. **Loop variables** in foreach - May get incorrect `self.` prefix
+3. **Loop variables** in foreach - May get incorrect `self.` prefix
+4. **Multi-file runs** - Translation report is only printed for single-file runs
 
 ## Project Structure
 
@@ -299,6 +329,9 @@ SystemVerilogToPython/
 ├── validation_utils.py       # Validation utilities
 ├── example_sv_classes.sv     # Example SV input
 ├── example_sv_classes.py     # Example translated output
+├── install_pyvsc.bat         # Windows install helper (legacy)
+├── install_pyvsc_wsl.bat     # WSL install helper for PyVSC
+├── run_example.bat           # Windows example runner
 ├── README.md                 # This file
 ├── CLAUDE.md                 # Development guidelines
 ├── requirements.txt          # Python dependencies
