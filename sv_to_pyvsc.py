@@ -2493,24 +2493,34 @@ from typing import Optional'''
 
         PyVSC requires the left operand of arithmetic operations to be a vsc type
         when the right operand is a vsc field. This handles cases like:
-            16384 - var  ->  vsc.unsigned(16384) - var
-            100 + var    ->  vsc.unsigned(100) + var
-            10 * var     ->  vsc.unsigned(10) * var
+            16384 - var      ->  vsc.unsigned(16384) - var
+            100 + var        ->  vsc.unsigned(100) + var
+            10 * var         ->  vsc.unsigned(10) * var
+            3 * (expr)       ->  vsc.unsigned(3) * (expr)
+            20 + self.var    ->  vsc.unsigned(20) + self.var
 
-        Note: We only wrap when the literal is followed by an operator and then
-        a variable (identifier), not when followed by another literal.
+        Note: We wrap when the literal is followed by an operator and then
+        either a variable, 'self.', 'vsc.', or an opening parenthesis.
         """
-        # Pattern: numeric literal followed by arithmetic operator (+, -, *, /)
-        # and then an identifier (variable name)
-        # Negative lookbehind to avoid matching inside vsc.unsigned() already
-        pattern = r'(?<!vsc\.unsigned\()(?<!\.)((?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+))\s*([-+*/])\s*([a-zA-Z_]\w*)'
+        # Pattern 1: literal op identifier (variable name)
+        pattern1 = r'(?<!vsc\.unsigned\()(?<![.\w])((?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+))\s*([-+*/])\s*([a-zA-Z_]\w*)'
 
-        def repl(match):
+        def repl1(match):
             literal, op, var = match.groups()
-            # Don't wrap if it's already part of a larger number or vsc call
             return f"vsc.unsigned({literal}) {op} {var}"
 
-        return re.sub(pattern, repl, expr)
+        expr = re.sub(pattern1, repl1, expr)
+
+        # Pattern 2: literal op ( - handles cases like 3*(expr)
+        pattern2 = r'(?<!vsc\.unsigned\()(?<![.\w])((?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+))\s*([-+*/])\s*\('
+
+        def repl2(match):
+            literal, op = match.groups()
+            return f"vsc.unsigned({literal}) {op} ("
+
+        expr = re.sub(pattern2, repl2, expr)
+
+        return expr
 
     @staticmethod
     def _convert_division_operator(expr: str) -> str:

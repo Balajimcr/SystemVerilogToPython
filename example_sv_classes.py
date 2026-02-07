@@ -114,6 +114,10 @@ class IspYuv2rgbCfg:
     self.yuv_isp_image_active_width = vsc.rand_int32_t()
     self.yuv_isp_out_scale_x = vsc.rand_int32_t()
     self.yuv_isp_crop_width = vsc.rand_int32_t()
+    self.yuv_gdc_scale_y = vsc.rand_int32_t()
+    self.yuv_gdc_scale_shifter_y = vsc.rand_int32_t()
+    self.yuv_gdc_org_height = vsc.rand_int32_t()
+    self.yuv_gdc_image_active_height = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -450,6 +454,24 @@ class IspYuv2rgbCfg:
       with vsc.else_then:
         (self.yuv_isp_image_crop_pre_x + self.yuv_isp_image_active_width*self.yuv_isp_out_scale_x//8192) <= (self.yuv_isp_crop_width)
       self.yuv_isp_image_crop_pre_x <= vsc.unsigned(16384) - self.yuv_isp_image_active_width
+
+  @vsc.constraint
+  def cr_literal_times_expr(self):
+    vsc.solve_order(self.yuv_gdc_org_height, self.yuv_gdc_scale_y)
+    vsc.solve_order(self.yuv_gdc_image_active_height, self.yuv_gdc_scale_y)
+    vsc.solve_order(self.yuv_gdc_scale_shifter_y, self.yuv_gdc_scale_y)
+    with vsc.if_then(self.IsGridMode == 0):
+      self.yuv_gdc_scale_y == ((vsc.unsigned(3) * (vsc.unsigned(1) <<(vsc.unsigned(20) + self.yuv_gdc_scale_shifter_y))+self.yuv_gdc_org_height//2)//self.yuv_gdc_org_height)
+    with vsc.else_then:
+      self.yuv_gdc_scale_y == ((vsc.unsigned(3) * (vsc.unsigned(1) <<(vsc.unsigned(20) + self.yuv_gdc_scale_shifter_y))+self.yuv_gdc_image_active_height//2)//self.yuv_gdc_image_active_height)
+
+  @vsc.constraint
+  def cr_literal_times_paren(self):
+    self.x == vsc.unsigned(5) * (self.y + self.z)
+
+  @vsc.constraint
+  def cr_literal_add_paren(self):
+    self.x == vsc.unsigned(100) + (self.y * self.z)
 
 # =============================================================================
 # USAGE EXAMPLE
