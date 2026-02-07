@@ -97,6 +97,9 @@ class IspYuv2rgbCfg:
     self.unsigned_val = vsc.rand_uint32_t()
     self.mode = vsc.rand_int32_t()
     self.range = vsc.rand_int32_t()
+    self.IsRdmaDataFormatYuv = vsc.rand_int32_t()
+    self.IsYuvFormat = vsc.rand_int32_t()
+    self.IsInBittageType = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -292,7 +295,7 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def tc_not(self):
-    with vsc.if_then(~(self.mode == 0)):
+    with vsc.if_then((self.mode != 0)):
       self.bit_depth == BitDepth.BIT_10
 
   @vsc.constraint
@@ -316,6 +319,50 @@ class IspYuv2rgbCfg:
     with vsc.if_then(self.fmt == 0):
       self.stride >= (self.arith_width * self.bit_depth + 7) // 8
       self.stride <= ((self.arith_width * self.bit_depth + 7) // 8) * 125 // 100
+
+  @vsc.constraint
+  def cr_inside_if(self):
+    vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsYuvFormat)
+    with vsc.if_then(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5, 16, 17, 20, 21))):
+      self.IsYuvFormat == 0
+    with vsc.else_then:
+      self.IsYuvFormat == 1
+
+  @vsc.constraint
+  def cr_inside_else_if(self):
+    vsc.solve_order(self.IsRdmaDataFormatYuv, self.IsInBittageType)
+    with vsc.if_then(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5, 7, 8))):
+      self.IsInBittageType == 0
+    with vsc.else_if(self.IsRdmaDataFormatYuv.inside(vsc.rangelist(16, 17, 32, 33))):
+      self.IsInBittageType == 1
+    with vsc.else_then:
+      self.IsInBittageType == 3
+
+  @vsc.constraint
+  def cr_inside_standalone(self):
+    self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 7, 8, 16, 17, 20, 21, 32, 33)
+
+  @vsc.constraint
+  def cr_inside_implies(self):
+    with vsc.implies((self.mode == 1)):
+      self.IsRdmaDataFormatYuv in vsc.rangelist(4, 5, 16, 17)
+
+  @vsc.constraint
+  def cr_complex_logic(self):
+    with vsc.if_then((self.a > 0)  &  (self.b < 10)  |  (self.c == 5)):
+      self.d == 1
+    with vsc.else_then:
+      self.d == 2
+
+  @vsc.constraint
+  def cr_negation(self):
+    with vsc.if_then((self.a != 0)  &  (self.b != 0)):
+      self.c == self.a + self.b
+
+  @vsc.constraint
+  def cr_implication_inside_antecedent(self):
+    with vsc.implies((self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5)))):
+      (self.IsYuvFormat == 0)
 
 # =============================================================================
 # USAGE EXAMPLE

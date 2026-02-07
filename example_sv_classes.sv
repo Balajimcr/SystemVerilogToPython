@@ -362,4 +362,53 @@ class isp_yuv2rgb_cfg;
         }
     }
 
+    // ========================================================================
+    // INSIDE IN CONDITIONS (PyVSC requires .inside() method in conditions)
+    // ========================================================================
+
+    rand int IsRdmaDataFormatYuv;
+    rand int IsYuvFormat;
+    rand int IsInBittageType;
+
+    constraint cr_inside_if {
+        if (IsRdmaDataFormatYuv inside {4, 5, 16, 17, 20, 21}) IsYuvFormat == 0;
+        else IsYuvFormat == 1;
+        solve IsRdmaDataFormatYuv before IsYuvFormat;
+    }
+
+    constraint cr_inside_else_if {
+        if (IsRdmaDataFormatYuv inside {4, 5, 7, 8}) IsInBittageType == 0;
+        else if (IsRdmaDataFormatYuv inside {16, 17, 32, 33}) IsInBittageType == 1;
+        else IsInBittageType == 3;
+        solve IsRdmaDataFormatYuv before IsInBittageType;
+    }
+
+    constraint cr_inside_standalone {
+        IsRdmaDataFormatYuv inside {4, 5, 7, 8, 16, 17, 20, 21, 32, 33};
+    }
+
+    constraint cr_inside_implies {
+        (mode == 1) -> IsRdmaDataFormatYuv inside {4, 5, 16, 17};
+    }
+
+    // ========================================================================
+    // COMPLEX LOGICAL OPERATORS
+    // ========================================================================
+
+    constraint cr_complex_logic {
+        if ((a > 0) && (b < 10) || (c == 5))
+            d == 1;
+        else
+            d == 2;
+    }
+
+    constraint cr_negation {
+        if (!(a == 0) && !(b == 0))
+            c == a + b;
+    }
+
+    constraint cr_implication_inside_antecedent {
+        (IsRdmaDataFormatYuv inside {4, 5}) -> (IsYuvFormat == 0);
+    }
+
 endclass

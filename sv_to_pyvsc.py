@@ -1750,7 +1750,7 @@ from typing import Optional'''
         bit_slice_match = re.match(r'(.+?)\s*->\s*\(?\s*(\w+)\[(\d+):(\d+)\]\s+inside\s*\{([^}]+)\}\s*\)?', stmt)
         if bit_slice_match:
             antecedent, var, high, low, inside_body = bit_slice_match.groups()
-            ant_expr = self._translate_expression(antecedent.strip())
+            ant_expr = self._translate_expression(antecedent.strip(), is_condition=True)
             rangelist = self._translate_inside(inside_body)
             # Preserve bit slice syntax - PyVSC supports it
             return [
@@ -1762,7 +1762,7 @@ from typing import Optional'''
         match = re.match(r'(.+?)\s*->\s*\(?\s*(\w+)\s+inside\s*\{([^}]+)\}\s*\)?', stmt)
         if match:
             antecedent, var_name, inside_body = match.groups()
-            ant_expr = self._translate_expression(antecedent.strip())
+            ant_expr = self._translate_expression(antecedent.strip(), is_condition=True)
             rangelist = self._translate_inside(inside_body)
             return [
                 f"with vsc.implies({ant_expr}):",
@@ -1774,7 +1774,7 @@ from typing import Optional'''
         """Try to translate simple implication."""
         match = re.match(r'(.+?)\s*->\s*(.+)', stmt)
         if match:
-            ant_expr = self._translate_expression(match.group(1).strip())
+            ant_expr = self._translate_expression(match.group(1).strip(), is_condition=True)
             cons_expr = self._translate_expression(match.group(2).strip())
             return [
                 f"with vsc.implies({ant_expr}):",
@@ -1815,7 +1815,7 @@ from typing import Optional'''
             return []
         
         condition, body, remaining = if_result
-        cond_expr = self._translate_expression(condition)
+        cond_expr = self._translate_expression(condition, is_condition=True)
         lines.append(f"{indent}with vsc.if_then({cond_expr}):")
         body_lines = self._parse_block_body(body, base_indent + 1)
         lines.extend(body_lines if body_lines else [f"{indent}    pass"])
@@ -1828,7 +1828,7 @@ from typing import Optional'''
             elif_result = self._parse_else_if_block(remaining)
             if elif_result:
                 condition, body, remaining = elif_result
-                cond_expr = self._translate_expression(condition)
+                cond_expr = self._translate_expression(condition, is_condition=True)
                 lines.append(f"{indent}with vsc.else_if({cond_expr}):")
                 body_lines = self._parse_block_body(body, base_indent + 1)
                 lines.extend(body_lines if body_lines else [f"{indent}    pass"])
@@ -2232,8 +2232,16 @@ from typing import Optional'''
         expr = self._translate_expression(stmt)
         return [expr] if expr and expr.strip() else []
 
-    def _translate_expression(self, expr: str) -> str:
-        """Translate a constraint expression."""
+    def _translate_expression(self, expr: str, is_condition: bool = False) -> str:
+        """Translate a constraint expression.
+
+        Args:
+            expr: The SystemVerilog expression to translate.
+            is_condition: If True, the expression is used in a condition context
+                          (if_then, else_if, implies) where Python operators like
+                          'in' evaluate to bool and break PyVSC. Use method syntax
+                          like .inside() instead.
+        """
         if not expr:
             return ""
 
@@ -2241,7 +2249,7 @@ from typing import Optional'''
         expr = self._convert_literal_shifts(expr)
         expr = self._convert_division_operator(expr)
         expr = self._convert_logical_operators(expr)
-        expr = self._convert_inside_expression(expr)
+        expr = self._convert_inside_expression(expr, is_condition=is_condition)
         expr = self._convert_bit_slicing(expr)
         expr = self._qualify_enum_values(expr)
         expr = self._add_self_prefix(expr)
@@ -2254,26 +2262,96 @@ from typing import Optional'''
         Conversions:
         - && -> &
         - || -> |
-        - !(expr) -> ~(expr)
-        - !var -> ~self.var
+        - !(a == b) -> (a != b)  (invert comparison operators)
+        - !(a != b) -> (a == b)
+        - !(a > b)  -> (a <= b)
+        - !(a < b)  -> (a >= b)
+        - !(a >= b) -> (a < b)
+        - !(a <= b) -> (a > b)
+        - !var -> (var == 0)
 
-        Note: PyVSC overloads ~ on its expression objects for logical NOT.
-        Python 'not' cannot be used because it evaluates to a plain bool
-        before PyVSC can capture the expression tree.
+        Note: PyVSC's ~ operator doesn't fully work in if_then conditions
+        (is_signed unimplemented error), so we invert comparisons instead.
         """
         # Convert && to & and || to |
         expr = re.sub(r'&&', ' & ', expr)
         expr = re.sub(r'\|\|', ' | ', expr)
 
-        # Convert ! to ~ for logical NOT (PyVSC overloads ~ on expr objects)
-        # Handle !( patterns first (negation of grouped expressions)
-        expr = re.sub(r'!\s*\(', '~(', expr)
+        # Convert negated comparisons by inverting the operator
+        # !(a == b) -> (a != b), !(a != b) -> (a == b), etc.
+        expr = self._invert_negated_comparisons(expr)
 
         # Handle !var patterns (negation of single variables)
+        # Convert !var to (var == 0) - PyVSC understands this
         # But don't convert != (not equal)
-        expr = re.sub(r'!(?!=)(\w)', r'~\1', expr)
+        expr = re.sub(r'!(?!=)(\w+)', r'(\1 == 0)', expr)
 
         return expr
+
+    def _invert_negated_comparisons(self, expr: str) -> str:
+        """Convert !(a op b) to (a inverted_op b).
+
+        PyVSC's ~ operator doesn't work properly in if_then conditions,
+        so we invert comparison operators instead.
+        """
+        # Map of operators to their inverses
+        inverse_ops = {
+            '==': '!=',
+            '!=': '==',
+            '>': '<=',
+            '<': '>=',
+            '>=': '<',
+            '<=': '>',
+        }
+
+        # Pattern: !(expr op expr) where op is a comparison
+        # Need to handle nested parens carefully
+        def invert_match(match):
+            inner = match.group(1)
+            # Try to find a comparison operator in the inner expression
+            for op, inv_op in inverse_ops.items():
+                # Look for the operator (handle spaces around it)
+                op_pattern = rf'^(.+?)\s*{re.escape(op)}\s*(.+)$'
+                op_match = re.match(op_pattern, inner)
+                if op_match:
+                    lhs, rhs = op_match.groups()
+                    return f'({lhs} {inv_op} {rhs})'
+            # If no comparison found, fall back to using ~ (may not work in all contexts)
+            return f'~({inner})'
+
+        # Match !(simple_comparison) - parens with simple content
+        # Handle !( followed by content and matching )
+        result = []
+        i = 0
+        while i < len(expr):
+            # Look for !( pattern
+            if i < len(expr) - 1 and expr[i] == '!' and expr[i+1] == '(':
+                # Find matching closing paren
+                paren_depth = 1
+                start = i + 2
+                j = start
+                while j < len(expr) and paren_depth > 0:
+                    if expr[j] == '(':
+                        paren_depth += 1
+                    elif expr[j] == ')':
+                        paren_depth -= 1
+                    j += 1
+                if paren_depth == 0:
+                    inner = expr[start:j-1]
+                    # Check if inner is a simple comparison (no nested ! or complex logic)
+                    if '!' not in inner and ' & ' not in inner and ' | ' not in inner:
+                        inverted = invert_match(re.match(r'(.+)', inner))
+                        if inverted:
+                            result.append(inverted)
+                            i = j
+                            continue
+                    # Complex expression - use ~ as fallback
+                    result.append(f'~({inner})')
+                    i = j
+                    continue
+            result.append(expr[i])
+            i += 1
+        return ''.join(result)
 
     @staticmethod
     def _convert_literal_shifts(expr: str) -> str:
@@ -2353,8 +2431,19 @@ from typing import Optional'''
 
         return expr
 
-    def _convert_inside_expression(self, expr: str) -> str:
-        """Convert 'var inside {values}' to 'var in vsc.rangelist(values)'."""
+    def _convert_inside_expression(self, expr: str, is_condition: bool = False) -> str:
+        """Convert 'var inside {values}' to appropriate PyVSC syntax.
+
+        Args:
+            expr: Expression containing 'inside' constraint.
+            is_condition: If True, use .inside() method syntax which returns a
+                          PyVSC expression object. If False, use 'in' operator
+                          syntax for standalone constraint statements.
+
+        In condition contexts (if_then, else_if, implies), Python's 'in' operator
+        evaluates to a plain bool before PyVSC can capture the expression tree.
+        The .inside() method returns a PyVSC expression object that works correctly.
+        """
         # Pattern: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
 
@@ -2362,7 +2451,12 @@ from typing import Optional'''
             var_name = match.group(1)
             values_str = match.group(2)
             rangelist = self._translate_inside(values_str)
-            return f'{var_name} in vsc.rangelist({rangelist})'
+            if is_condition:
+                # Use method syntax for conditions - returns PyVSC expr object
+                return f'{var_name}.inside(vsc.rangelist({rangelist}))'
+            else:
+                # Use 'in' operator for standalone constraints
+                return f'{var_name} in vsc.rangelist({rangelist})'
 
         return re.sub(pattern, replace_inside, expr)
 
