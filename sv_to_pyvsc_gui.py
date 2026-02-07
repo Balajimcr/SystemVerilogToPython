@@ -59,7 +59,7 @@ class SVtoPyVSCGUI:
     def _set_default_paths(self):
         """Set default file paths based on current directory."""
         cwd = os.getcwd()
-        default_sv = os.path.join(cwd, "example_sv_classes.sv")
+        default_sv = os.path.join(cwd, "isp_yuv2rgb.sv")
         default_hw = os.path.join(cwd, "hw_field.txt")
 
         if os.path.exists(default_sv):
