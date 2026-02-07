@@ -1,36 +1,33 @@
+# ============================================================================
 # Hardware Field Configuration File
 # Format: field_name default_value
 # Lines starting with # are comments
+#
+# Generated from solver-stable isp_rand_item SV model
+# ============================================================================
 
-# Core Controls
-enable 1
-yuv_format 0
-yuv_packing 0
-yuv_bit_depth 0
-color_space 0
-range_mode 0
-rgb_format 0
+# ---------------------------------------------------------------------------
+# Core ISP Controls
+# ---------------------------------------------------------------------------
+isp_bypass_mode 0        # 0 = normal path
+isp_yuv_format 0         # YUV_444
+isp_src_comp 0           # COMP_RGB
+isp_dst_comp 0           # COMP_RGB
+isp_in_bit_depth 0       # BIT_8
+isp_out_bit_depth 0      # BIT_8
 
-# Frame Geometry
-width 0
-height 0
+# ---------------------------------------------------------------------------
+# DMA / Data Format Controls
+# ---------------------------------------------------------------------------
+rdma_data_format 0
+wdma_data_format 0
 
-# Feature Enables
-chroma_enabled 0
-dither_enable 0
-clip_enable 0
-
-# Matrix Coefficients
-c00 0
-c01 0
-c02 0
-c10 0
-c11 0
-c12 0
-c20 0
-c21 0
-c22 0
-
-# Offsets
-y_offset 0
-uv_offset 0
+# ---------------------------------------------------------------------------
+# Signed Grid Parameters (2D grid / warp / correction)
+# ---------------------------------------------------------------------------
+isp_grid_2d_0_0 0
+isp_grid_2d_0_1 0
+isp_grid_2d_0_2 0
+isp_grid_2d_0_3 0
+isp_grid_2d_0_4 0
+isp_grid_2d_0_6 0
