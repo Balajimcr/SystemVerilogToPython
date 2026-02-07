@@ -572,8 +572,9 @@ class PyVSCGenerator:
 
     INDENT = "    "
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, collect_metrics: bool = True):
         self.verbose = verbose  # When True, include original SV code and metrics in output
+        self.collect_metrics = collect_metrics
         self.warnings: List[str] = []
         self.manual_review_items: List[str] = []
         self.mapping_notes: List[str] = []
@@ -584,7 +585,8 @@ class PyVSCGenerator:
         self._reset_state()
         
         # Analyze source SV code for metrics
-        self._analyze_sv_source(sv_classes)
+        if self.collect_metrics:
+            self._analyze_sv_source(sv_classes)
 
         # Build enum value -> enum class name map for expression translation
         for sv_class in sv_classes:
@@ -634,8 +636,9 @@ class PyVSCGenerator:
                 self.warnings.extend(result['warnings'])
                 self.mapping_notes.extend(result['mapping_notes'])
                 self.manual_review_items.extend(result['manual_review_items'])
-                self.statistics['fields'] += result['statistics'].get('fields', 0)
-                self.statistics['constraints'] += result['statistics'].get('constraints', 0)
+                if self.collect_metrics:
+                    self.statistics['fields'] += result['statistics'].get('fields', 0)
+                    self.statistics['constraints'] += result['statistics'].get('constraints', 0)
             self.statistics['classes'] += len(sv_classes)
         else:
             pbar = _get_progress_bar(len(sv_classes), "Translating classes", progress and len(sv_classes) > 1)
@@ -644,9 +647,10 @@ class PyVSCGenerator:
                     class_code = self._generate_class(sv_class)
 
                     # Validate the generated code
-                    validation_issues = self._validate_generated_code(sv_class, class_code)
-                    for issue in validation_issues:
-                        self._add_warning(issue)
+                    if self.collect_metrics:
+                        validation_issues = self._validate_generated_code(sv_class, class_code)
+                        for issue in validation_issues:
+                            self._add_warning(issue)
 
                     code_parts.append(class_code)
                     self.statistics['classes'] += 1
@@ -661,13 +665,14 @@ class PyVSCGenerator:
         # Post-process: convert 4-space indentation to 2-space
         final_code = self._reduce_indentation(final_code)
 
-        # Analyze output Python code for metrics
-        self._analyze_py_output(final_code)
-        
-        # Final validation - check for SV syntax leaks
-        leak_issues = self._check_sv_syntax_leaks(final_code)
-        for issue in leak_issues:
-            self._add_warning(issue)
+        if self.collect_metrics:
+            # Analyze output Python code for metrics
+            self._analyze_py_output(final_code)
+            
+            # Final validation - check for SV syntax leaks
+            leak_issues = self._check_sv_syntax_leaks(final_code)
+            for issue in leak_issues:
+                self._add_warning(issue)
 
         return TranslationResult(
             pyvsc_code=final_code,
@@ -679,7 +684,7 @@ class PyVSCGenerator:
 
     def _spawn_worker_generator(self) -> "PyVSCGenerator":
         """Create a worker generator with shared enum mappings and fresh state."""
-        worker = PyVSCGenerator(verbose=self.verbose)
+        worker = PyVSCGenerator(verbose=self.verbose, collect_metrics=self.collect_metrics)
         worker.enum_value_map = self.enum_value_map
         worker.enum_class_names = self.enum_class_names
         worker.statistics = {'classes': 0, 'fields': 0, 'constraints': 0, 'enums': 0}
@@ -692,10 +697,10 @@ class PyVSCGenerator:
         """Generate class code and collect per-class warnings/notes."""
         worker = self._spawn_worker_generator()
         class_code = worker._generate_class(sv_class)
-
-        validation_issues = worker._validate_generated_code(sv_class, class_code)
-        for issue in validation_issues:
-            worker._add_warning(issue)
+        if self.collect_metrics:
+            validation_issues = worker._validate_generated_code(sv_class, class_code)
+            for issue in validation_issues:
+                worker._add_warning(issue)
 
         return {
             'code': class_code,
@@ -932,38 +937,41 @@ class PyVSCGenerator:
         self.enum_class_names = set()
         
         # Detailed conversion metrics
-        self.metrics = {
-            # Source metrics (detected in SV)
-            'sv_lines': 0,
-            'sv_variables': set(),
-            'sv_conditionals': 0,
-            'sv_logical_and': 0,
-            'sv_logical_or': 0,
-            'sv_logical_not': 0,
-            'sv_inside': 0,
-            'sv_implies': 0,
-            'sv_dist': 0,
-            'sv_solve_order': 0,
-            'sv_foreach': 0,
-            'sv_unique': 0,
-            'sv_soft': 0,
-            'sv_bit_slices': 0,
-            'sv_number_formats': 0,
-            
-            # Output metrics (generated in Python)
-            'py_lines': 0,
-            'py_variables': set(),
-            'py_if_then': 0,
-            'py_else_if': 0,
-            'py_else_then': 0,
-            'py_rangelist': 0,
-            'py_implies': 0,
-            'py_dist': 0,
-            'py_solve_order': 0,
-            'py_foreach': 0,
-            'py_unique': 0,
-            'py_soft': 0,
-        }
+        if self.collect_metrics:
+            self.metrics = {
+                # Source metrics (detected in SV)
+                'sv_lines': 0,
+                'sv_variables': set(),
+                'sv_conditionals': 0,
+                'sv_logical_and': 0,
+                'sv_logical_or': 0,
+                'sv_logical_not': 0,
+                'sv_inside': 0,
+                'sv_implies': 0,
+                'sv_dist': 0,
+                'sv_solve_order': 0,
+                'sv_foreach': 0,
+                'sv_unique': 0,
+                'sv_soft': 0,
+                'sv_bit_slices': 0,
+                'sv_number_formats': 0,
+                
+                # Output metrics (generated in Python)
+                'py_lines': 0,
+                'py_variables': set(),
+                'py_if_then': 0,
+                'py_else_if': 0,
+                'py_else_then': 0,
+                'py_rangelist': 0,
+                'py_implies': 0,
+                'py_dist': 0,
+                'py_solve_order': 0,
+                'py_foreach': 0,
+                'py_unique': 0,
+                'py_soft': 0,
+            }
+        else:
+            self.metrics = {}
 
     def _analyze_sv_source(self, sv_classes: List[SVClass]):
         """Analyze source SV code to collect metrics."""
@@ -1280,15 +1288,21 @@ from typing import Optional'''
 
     def _generate_constraint(self, constraint: SVConstraint) -> List[str]:
         """Generate pyvsc constraint from SV constraint."""
-        # Calculate per-constraint metrics from source
-        metrics = self._calculate_constraint_metrics(constraint.body)
+        # Calculate per-constraint metrics from source (report mode only)
+        if self.collect_metrics:
+            metrics = self._calculate_constraint_metrics(constraint.body)
+        else:
+            metrics = {}
 
         # First translate the body to get output
         body_lines = self._translate_constraint_body(constraint.body)
         body_code = '\n'.join(body_lines)
 
         # Calculate output metrics
-        output_metrics = self._calculate_output_metrics(body_code, metrics['variable_names'])
+        if self.collect_metrics:
+            output_metrics = self._calculate_output_metrics(body_code, metrics['variable_names'])
+        else:
+            output_metrics = {'missing_vars': set(), 'name_mismatches': []}
 
         lines = [
             f"{self.INDENT}@vsc.constraint",
@@ -1358,12 +1372,13 @@ from typing import Optional'''
 
             lines.append(f'{self.INDENT}{self.INDENT}"""')
 
-        # Always track warnings internally regardless of verbose mode
-        if output_metrics['missing_vars']:
-            self._add_warning(f"Constraint '{constraint.name}': Variables missing in output: {', '.join(sorted(output_metrics['missing_vars']))}")
+        # Track warnings internally only when metrics are enabled
+        if self.collect_metrics:
+            if output_metrics['missing_vars']:
+                self._add_warning(f"Constraint '{constraint.name}': Variables missing in output: {', '.join(sorted(output_metrics['missing_vars']))}")
 
-        if output_metrics['name_mismatches']:
-            self._add_warning(f"Constraint '{constraint.name}': Variable names may have changed")
+            if output_metrics['name_mismatches']:
+                self._add_warning(f"Constraint '{constraint.name}': Variable names may have changed")
 
         if body_lines:
             for line in body_lines:
@@ -2639,7 +2654,7 @@ class SVtoPyVSCTranslator:
 
     def __init__(self, verbose: bool = False):
         self.parser = SVParser()
-        self.generator = PyVSCGenerator(verbose=verbose)
+        self.generator = PyVSCGenerator(verbose=verbose, collect_metrics=verbose)
 
     def translate_file(
         self,
@@ -2653,13 +2668,40 @@ class SVtoPyVSCTranslator:
         with open(input_path, 'r') as f:
             sv_code = f.read()
 
-        result = self.translate_code(sv_code, jobs=jobs, progress=progress)
+        if progress:
+            pbar = _get_progress_bar(3, "Converting", True)
+            try:
+                sv_classes = self.parser.parse(sv_code)
+                pbar.update(1)
 
-        if output_path:
-            with open(output_path, 'w') as f:
-                f.write(result.pyvsc_code)
-            if print_output:
-                print(f"Output written to: {output_path}")
+                if not sv_classes:
+                    result = TranslationResult(
+                        pyvsc_code="# No classes found in input",
+                        warnings=["No SystemVerilog classes found in input"],
+                        manual_review_items=[],
+                        mapping_notes=[],
+                        statistics={'classes': 0, 'fields': 0, 'constraints': 0, 'enums': 0}
+                    )
+                else:
+                    result = self.generator.generate(sv_classes, jobs=jobs, progress=progress)
+                pbar.update(1)
+
+                if output_path:
+                    with open(output_path, 'w') as f:
+                        f.write(result.pyvsc_code)
+                    if print_output:
+                        print(f"Output written to: {output_path}")
+                pbar.update(1)
+            finally:
+                pbar.close()
+        else:
+            result = self.translate_code(sv_code, jobs=jobs, progress=progress)
+
+            if output_path:
+                with open(output_path, 'w') as f:
+                    f.write(result.pyvsc_code)
+                if print_output:
+                    print(f"Output written to: {output_path}")
 
         return result
 
