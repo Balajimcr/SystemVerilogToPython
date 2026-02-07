@@ -100,6 +100,11 @@ class IspYuv2rgbCfg:
     self.IsRdmaDataFormatYuv = vsc.rand_int32_t()
     self.IsYuvFormat = vsc.rand_int32_t()
     self.IsInBittageType = vsc.rand_int32_t()
+    self.IsSrcCompType = vsc.rand_int32_t()
+    self.IsInWidth = vsc.rand_int32_t()
+    self.yuv_rdmaY_img_stride_1p = vsc.rand_int32_t()
+    self.yuv_rdmaY_sbwc_lossy_comp_mode = vsc.rand_int32_t()
+    self.yuv_rdmaY_comp_64B_align = vsc.rand_int32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -235,7 +240,7 @@ class IspYuv2rgbCfg:
     vsc.solve_order(self.yuv_bit_depth, self.dither_enable)
     vsc.solve_order(self.rgb_format, self.dither_enable)
     vsc.solve_order(self.range_mode, self.clip_enable)
-    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8)  &  (self.rgb_format == RgbFormat.RGB_888)):
+    with vsc.if_then((self.yuv_bit_depth > BitDepth.BIT_8) & (self.rgb_format == RgbFormat.RGB_888)):
       self.dither_enable == 1
     with vsc.else_then:
       self.dither_enable in vsc.rangelist(0, 1)
@@ -272,7 +277,7 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def tc_logical_ops(self):
-    with vsc.if_then((self.a > 8)  &  (self.b < 4)):
+    with vsc.if_then((self.a > 8) & (self.b < 4)):
       self.c == 1
     with vsc.else_then:
       self.c == 0
@@ -349,20 +354,42 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_complex_logic(self):
-    with vsc.if_then((self.a > 0)  &  (self.b < 10)  |  (self.c == 5)):
+    with vsc.if_then((self.a > 0) & (self.b < 10) | (self.c == 5)):
       self.d == 1
     with vsc.else_then:
       self.d == 2
 
   @vsc.constraint
   def cr_negation(self):
-    with vsc.if_then((self.a != 0)  &  (self.b != 0)):
+    with vsc.if_then(((self.a != 0)) & ((self.b != 0))):
       self.c == self.a + self.b
 
   @vsc.constraint
   def cr_implication_inside_antecedent(self):
     with vsc.implies((self.IsRdmaDataFormatYuv.inside(vsc.rangelist(4, 5)))):
       (self.IsYuvFormat == 0)
+
+  @vsc.constraint
+  def cr_logical_precedence(self):
+    with vsc.if_then((self.yuv_rdmaY_sbwc_lossy_comp_mode == 0) | (self.yuv_rdmaY_sbwc_lossy_comp_mode == 1)):
+      with vsc.if_then((self.yuv_rdmaY_comp_64B_align != 0)):
+        self.yuv_rdmaY_img_stride_1p == ((self.IsInWidth+31)//32)*128
+      with vsc.else_then:
+        self.yuv_rdmaY_img_stride_1p == ((self.IsInWidth+31)//32)*96
+    with vsc.else_if(self.yuv_rdmaY_sbwc_lossy_comp_mode == 2):
+      self.yuv_rdmaY_img_stride_1p == ((self.IsInWidth+31)//32)*64
+
+  @vsc.constraint
+  def cr_multi_or(self):
+    with vsc.if_then((self.mode == 0) | (self.mode == 1) | (self.mode == 2)):
+      self.a == 1
+    with vsc.else_then:
+      self.a == 0
+
+  @vsc.constraint
+  def cr_mixed_and_or(self):
+    with vsc.if_then((self.a == 1) & (self.b == 2) | (self.c == 3)):
+      self.d == 100
 
 # =============================================================================
 # USAGE EXAMPLE

@@ -2288,9 +2288,9 @@ from typing import Optional'''
         Note: PyVSC's ~ operator doesn't fully work in if_then conditions
         (is_signed unimplemented error), so we invert comparisons instead.
         """
-        # Convert && to & and || to |
-        expr = re.sub(r'&&', ' & ', expr)
-        expr = re.sub(r'\|\|', ' | ', expr)
+        # Convert && to & and || to | with proper parenthesization
+        # Python's | and & have higher precedence than ==, so we need parens
+        expr = self._convert_logical_ops_with_parens(expr)
 
         # Convert negated comparisons by inverting the operator
         # !(a == b) -> (a != b), !(a != b) -> (a == b), etc.
@@ -2302,6 +2302,107 @@ from typing import Optional'''
         expr = re.sub(r'!(?!=)(\w+)', r'(\1 == 0)', expr)
 
         return expr
+
+    @staticmethod
+    def _convert_logical_ops_with_parens(expr: str) -> str:
+        """Convert && to & and || to | with proper parenthesization.
+
+        Python's bitwise operators (& |) have higher precedence than comparison
+        operators (== != < > <= >=), unlike SystemVerilog where && and || have
+        lower precedence. We must wrap comparison expressions in parentheses.
+
+        Example:
+            a == 0 || b == 1  ->  (a == 0) | (b == 1)
+            a > 5 && b < 10   ->  (a > 5) & (b < 10)
+        """
+        # Pattern to match: expr op expr where op is && or ||
+        # We need to find comparison expressions and wrap them
+
+        # First, split by && and ||, keeping the operators
+        # Then wrap each part that contains a comparison operator
+
+        comparison_ops = ['==', '!=', '<=', '>=', '<', '>']
+
+        def needs_parens(part: str) -> bool:
+            """Check if this part has a comparison that needs wrapping."""
+            part = part.strip()
+            # Already wrapped in parens
+            if part.startswith('(') and part.endswith(')'):
+                return False
+            # Contains a comparison operator
+            for op in comparison_ops:
+                if op in part:
+                    return True
+            return False
+
+        def wrap_if_needed(part: str) -> str:
+            """Wrap part in parens if it contains a comparison."""
+            part = part.strip()
+            if needs_parens(part):
+                return f'({part})'
+            return part
+
+        # Process && first, then ||
+        # Split by || keeping track of positions
+        result = expr
+
+        # Replace && and || with placeholders that won't interfere
+        # Then process each segment
+
+        # Simple approach: find && and || and wrap their operands
+        # We need to handle nested parens correctly
+
+        # Split on && and ||, process each part
+        parts = []
+        operators = []
+        current = ""
+        paren_depth = 0
+        i = 0
+
+        while i < len(result):
+            char = result[i]
+
+            if char == '(':
+                paren_depth += 1
+                current += char
+            elif char == ')':
+                paren_depth -= 1
+                current += char
+            elif paren_depth == 0 and i + 1 < len(result):
+                two_char = result[i:i+2]
+                if two_char == '&&':
+                    parts.append(current.strip())
+                    operators.append(' & ')
+                    current = ""
+                    i += 2
+                    continue
+                elif two_char == '||':
+                    parts.append(current.strip())
+                    operators.append(' | ')
+                    current = ""
+                    i += 2
+                    continue
+                else:
+                    current += char
+            else:
+                current += char
+            i += 1
+
+        parts.append(current.strip())
+
+        # If no operators found, return original
+        if not operators:
+            return expr
+
+        # Wrap parts that need it
+        wrapped_parts = [wrap_if_needed(p) for p in parts]
+
+        # Reconstruct
+        result = wrapped_parts[0]
+        for i, op in enumerate(operators):
+            result += op + wrapped_parts[i + 1]
+
+        return result
 
     def _invert_negated_comparisons(self, expr: str) -> str:
         """Convert !(a op b) to (a inverted_op b).

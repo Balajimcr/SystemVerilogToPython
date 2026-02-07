@@ -411,4 +411,38 @@ class isp_yuv2rgb_cfg;
         (IsRdmaDataFormatYuv inside {4, 5}) -> (IsYuvFormat == 0);
     }
 
+    // ========================================================================
+    // LOGICAL OPERATOR PRECEDENCE (Python | & have higher precedence than ==)
+    // ========================================================================
+
+    rand int IsSrcCompType;
+    rand int IsInWidth;
+    rand int yuv_rdmaY_img_stride_1p;
+    rand int yuv_rdmaY_sbwc_lossy_comp_mode;
+    rand int yuv_rdmaY_comp_64B_align;
+
+    constraint cr_logical_precedence {
+        if (yuv_rdmaY_sbwc_lossy_comp_mode == 0 || yuv_rdmaY_sbwc_lossy_comp_mode == 1) {
+            if (yuv_rdmaY_comp_64B_align) {
+                yuv_rdmaY_img_stride_1p == ((IsInWidth+31)/32)*128;
+            } else {
+                yuv_rdmaY_img_stride_1p == ((IsInWidth+31)/32)*96;
+            }
+        } else if (yuv_rdmaY_sbwc_lossy_comp_mode == 2) {
+            yuv_rdmaY_img_stride_1p == ((IsInWidth+31)/32)*64;
+        }
+    }
+
+    constraint cr_multi_or {
+        if (mode == 0 || mode == 1 || mode == 2)
+            a == 1;
+        else
+            a == 0;
+    }
+
+    constraint cr_mixed_and_or {
+        if (a == 1 && b == 2 || c == 3)
+            d == 100;
+    }
+
 endclass
