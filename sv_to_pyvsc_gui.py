@@ -580,7 +580,7 @@ class SVtoPyVSCGUI:
             "- SV to PyVSC translation\n"
             "- PyVSC randomization testing\n"
             "- Bulk test vector generation\n\n"
-            "Developed for Samsung Hardware Verification"
+            "Developed for Design Verification"
         )
 
 

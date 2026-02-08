@@ -101,6 +101,17 @@ GUI capabilities:
 - WSL toggle for PyVSC execution (required for PyVSC tests on Windows)
 - Live log output with colored status + concise results summary
 
+#### GUI Tool Info
+
+The GUI provides a guided, three-step workflow:
+- Step 1: Translate SystemVerilog to PyVSC
+- Step 2: Run PyVSC randomization tests
+- Step 3: Generate test vectors
+
+Screenshot:
+
+![SystemVerilogToPython GUI](SystemVerologToPythonGUI.jpg)
+
 ### Test Vector Generation (CLI)
 
 ```bash
