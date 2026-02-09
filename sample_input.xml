@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample XML input for testing the XML to SV conversion pipeline -->
+<!-- Replace this with actual XML register/constraint definitions -->
+<register_config name="sample_input">
+    <description>Sample configuration for pipeline testing</description>
+
+    <enums>
+        <enum name="mode_e">
+            <value name="MODE_A" val="0"/>
+            <value name="MODE_B" val="1"/>
+            <value name="MODE_C" val="2"/>
+        </enum>
+    </enums>
+
+    <fields>
+        <field name="enable" type="bit" width="1" rand="true"/>
+        <field name="data_width" type="bit" width="8" rand="true"/>
+        <field name="data_height" type="bit" width="8" rand="true"/>
+        <field name="mode" type="int" rand="true"/>
+    </fields>
+
+    <constraints>
+        <constraint name="cr_default">
+            <rule>enable inside {0, 1}</rule>
+            <rule>mode inside {MODE_A, MODE_B, MODE_C}</rule>
+        </constraint>
+        <constraint name="cr_dimensions">
+            <rule>data_width inside {[1:255]}</rule>
+            <rule>data_height inside {[1:255]}</rule>
+        </constraint>
+    </constraints>
+</register_config>
