@@ -1,6 +1,5 @@
 @echo off
-rem Replace hardcoded paths with relative paths using %~dp0
-set REL_PATH=%~dp0..elative_directory\
-
-rem Example of using the relative path
-\path\to\your\executable.exe %REL_PATH%inputfile.txt
+set PATH=C:\Tools\Python39;%PATH%
+set PATH=C:\Tools\Java\jdk-11.0.10\bin;%PATH%
+python -m unittest discover -s tests -p "*_test.py"
+echo Test complete. Please check the results.
