@@ -533,4 +533,30 @@ class isp_yuv2rgb_cfg;
         x == 100 + (y * z);
     }
 
+    // ========================================================================
+    // EXPRESSION INSIDE (parenthesized expr on LHS of inside)
+    // ========================================================================
+
+    rand int unsigned rgb_isp_2d_table_0_0;
+    rand int unsigned rgb_isp_2d_table_0_1;
+
+    constraint cr_expr_inside_simple {
+        rgb_isp_2d_table_0_0 inside {[0:512]};
+        rgb_isp_2d_table_0_1 inside {[1:1024]};
+        rgb_isp_2d_table_0_1 > rgb_isp_2d_table_0_0;
+        (rgb_isp_2d_table_0_1 - rgb_isp_2d_table_0_0) inside {1, 2, 4, 8, 16, 32, 64, 128, 256, 512};
+        solve rgb_isp_2d_table_0_0 before rgb_isp_2d_table_0_1;
+    }
+
+    constraint cr_expr_inside_add {
+        (a + b) inside {[-100:100]};
+    }
+
+    constraint cr_expr_inside_in_condition {
+        if ((a - b) inside {1, 2, 3, 4})
+            c == 1;
+        else
+            c == 0;
+    }
+
 endclass

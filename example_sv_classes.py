@@ -118,6 +118,8 @@ class IspYuv2rgbCfg:
     self.yuv_isp_scale_shifter_y = vsc.rand_int32_t()
     self.yuv_isp_org_height = vsc.rand_int32_t()
     self.yuv_isp_image_active_height = vsc.rand_int32_t()
+    self.rgb_isp_2d_table_0_0 = vsc.rand_uint32_t()
+    self.rgb_isp_2d_table_0_1 = vsc.rand_uint32_t()
 
   @vsc.constraint
   def cr_default_rangelists(self):
@@ -472,6 +474,25 @@ class IspYuv2rgbCfg:
   @vsc.constraint
   def cr_literal_add_paren(self):
     self.x == vsc.unsigned(100) + (self.y * self.z)
+
+  @vsc.constraint
+  def cr_expr_inside_simple(self):
+    vsc.solve_order(self.rgb_isp_2d_table_0_0, self.rgb_isp_2d_table_0_1)
+    self.rgb_isp_2d_table_0_0 in vsc.rangelist(vsc.rng(0, 512))
+    self.rgb_isp_2d_table_0_1 in vsc.rangelist(vsc.rng(1, 1024))
+    self.rgb_isp_2d_table_0_1 > self.rgb_isp_2d_table_0_0
+    (self.rgb_isp_2d_table_0_1 - self.rgb_isp_2d_table_0_0).inside(vsc.rangelist(1, 2, 4, 8, 16, 32, 64, 128, 256, 512))
+
+  @vsc.constraint
+  def cr_expr_inside_add(self):
+    (self.a + self.b).inside(vsc.rangelist(vsc.rng(-100, 100)))
+
+  @vsc.constraint
+  def cr_expr_inside_in_condition(self):
+    with vsc.if_then((self.a - self.b).inside(vsc.rangelist(1, 2, 3, 4))):
+      self.c == 1
+    with vsc.else_then:
+      self.c == 0
 
 # =============================================================================
 # USAGE EXAMPLE

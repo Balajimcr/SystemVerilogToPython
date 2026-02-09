@@ -1741,6 +1741,16 @@ from typing import Optional'''
             # Preserve bit slice syntax - PyVSC supports it
             return [f"self.{var}[{high}:{low}] in vsc.rangelist({rangelist})"]
 
+        # Handle parenthesized expression inside: (expr) inside {...}
+        # e.g. (a - b) inside {1, 2, 4, 8}
+        paren_inside = re.match(r'(\(.+?\))\s+inside\s*\{([^}]+)\}', stmt)
+        if paren_inside:
+            expr, inside_body = paren_inside.groups()
+            rangelist = self._translate_inside(inside_body)
+            translated_expr = self._translate_expression(expr)
+            # Use .inside() method syntax for expressions
+            return [f"{translated_expr}.inside(vsc.rangelist({rangelist}))"]
+
         # Standard inside: var inside {...} or var.size() inside {...}
         match = re.match(r'(\w+(?:\.\w+\(\))?)\s+inside\s*\{([^}]+)\}', stmt)
         if match:
@@ -2596,7 +2606,20 @@ from typing import Optional'''
         evaluates to a plain bool before PyVSC can capture the expression tree.
         The .inside() method returns a PyVSC expression object that works correctly.
         """
-        # Pattern: identifier inside {values}
+        # Pattern 1: parenthesized expression inside {values}
+        # e.g. (a - b) inside {1, 2, 4}  -> always use .inside() for expressions
+        paren_pattern = r'(\([^)]+\))\s+inside\s*\{([^}]+)\}'
+
+        def replace_paren_inside(match):
+            paren_expr = match.group(1)
+            values_str = match.group(2)
+            rangelist = self._translate_inside(values_str)
+            # Always use .inside() method for parenthesized expressions
+            return f'{paren_expr}.inside(vsc.rangelist({rangelist}))'
+
+        expr = re.sub(paren_pattern, replace_paren_inside, expr)
+
+        # Pattern 2: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
 
         def replace_inside(match):
