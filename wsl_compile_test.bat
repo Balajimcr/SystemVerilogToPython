@@ -40,6 +40,33 @@ if not defined WSL_DISTRO (
     exit /b 1
 )
 
+:: Verify expected values from Env.csh
+set "EXPECTED_WSL_PROJECT_PATH=/mnt/c/D/Project_Files/Samsung/SystemVerilogToPython"
+set "EXPECTED_WSL_VENV_PATH=.wsl_venv"
+set "EXPECTED_WSL_DISTRO=Ubuntu"
+
+if /i not "%WSL_PROJECT_PATH%"=="%EXPECTED_WSL_PROJECT_PATH%" (
+    echo [ERROR] WSL_PROJECT_PATH mismatch.
+    echo   Expected: %EXPECTED_WSL_PROJECT_PATH%
+    echo   Found:    %WSL_PROJECT_PATH%
+    pause
+    exit /b 1
+)
+if /i not "%WSL_VENV_PATH%"=="%EXPECTED_WSL_VENV_PATH%" (
+    echo [ERROR] WSL_VENV_PATH mismatch.
+    echo   Expected: %EXPECTED_WSL_VENV_PATH%
+    echo   Found:    %WSL_VENV_PATH%
+    pause
+    exit /b 1
+)
+if /i not "%WSL_DISTRO%"=="%EXPECTED_WSL_DISTRO%" (
+    echo [ERROR] WSL_DISTRO mismatch.
+    echo   Expected: %EXPECTED_WSL_DISTRO%
+    echo   Found:    %WSL_DISTRO%
+    pause
+    exit /b 1
+)
+
 echo Using paths from Env.csh:
 echo   WSL_PROJECT_PATH = %WSL_PROJECT_PATH%
 echo   WSL_VENV_PATH    = %WSL_VENV_PATH%
