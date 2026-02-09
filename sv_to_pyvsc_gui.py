@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-SystemVerilog to PyVSC Translation GUI
+SystemVerilog / XML to PyVSC Translation GUI
 
 A Tkinter-based GUI for:
-1. Browsing and selecting SystemVerilog (.sv) files
-2. Translating SV to PyVSC Python code
-3. Running PyVSC randomization tests
-4. Generating test vectors
-5. Displaying results and logs
+1. Browsing and selecting SystemVerilog (.sv) or XML (.xml) files
+2. Converting XML to SV (if XML input is selected)
+3. Translating SV to PyVSC Python code
+4. Running PyVSC randomization tests
+5. Generating test vectors
+6. Displaying results and logs
+
+All PyVSC output is generated in the Output/ directory.
+PyVSC tests are executed from the Output/ directory.
 
 Usage:
     python sv_to_pyvsc_gui.py
@@ -28,19 +32,31 @@ from pathlib import Path
 class SVtoPyVSCGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("SystemVerilog to PyVSC Translation Tool")
+        self.root.title("SV / XML to PyVSC Translation Tool")
         self.root.geometry("1200x800")
         self.root.minsize(900, 600)
 
+        # Project root directory (where this script lives)
+        self.project_root = os.path.dirname(os.path.abspath(__file__))
+
+        # Load environment config from Env.csh
+        self.env_config = self._load_env_config()
+
+        # Output directory for all PyVSC generated files
+        self.output_base_dir = os.path.join(self.project_root, "Output")
+        os.makedirs(self.output_base_dir, exist_ok=True)
+
         # Variables
-        self.sv_file_path = tk.StringVar()
-        self.output_py_path = tk.StringVar()
+        self.input_file_path = tk.StringVar()       # Can be .sv or .xml
+        self.sv_file_path = tk.StringVar()           # Resolved .sv path (after XML conversion)
+        self.output_py_path = tk.StringVar()         # Always in Output/ directory
         self.hw_field_path = tk.StringVar()
         self.class_name = tk.StringVar(value="")
         self.num_vectors = tk.IntVar(value=10)
         self.random_seed = tk.IntVar(value=12345)
         self.output_dir = tk.StringVar(value="./test_vectors")
         self.use_wsl = tk.BooleanVar(value=True)
+        self.input_type = tk.StringVar(value="N/A")  # "SV", "XML", or "N/A"
 
         # Message queue for thread-safe logging
         self.log_queue = queue.Queue()
@@ -56,15 +72,80 @@ class SVtoPyVSCGUI:
         # Set default paths
         self._set_default_paths()
 
+    def _load_env_config(self):
+        """
+        Load environment configuration from Env.csh.
+
+        Returns a dict with keys:
+            WIN_PROJECT_PATH, WSL_PROJECT_PATH, WSL_VENV_PATH,
+            WSL_DISTRO, WSL_PYTHON_VERSION
+        """
+        env_file = os.path.join(self.project_root, "Env.csh")
+        config = {}
+
+        if not os.path.exists(env_file):
+            print(f"[WARNING] Env.csh not found at: {env_file}")
+            print("          Using fallback defaults. Create Env.csh to configure paths.")
+            # Fallback defaults
+            config['WIN_PROJECT_PATH'] = self.project_root
+            config['WSL_PROJECT_PATH'] = self._to_wsl_path(self.project_root)
+            config['WSL_VENV_PATH'] = '.wsl_venv'
+            config['WSL_DISTRO'] = 'Ubuntu'
+            config['WSL_PYTHON_VERSION'] = '3.10'
+            return config
+
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip comments and blank lines
+                    if not line or line.startswith('#'):
+                        continue
+                    # Parse KEY = VALUE
+                    if '=' in line:
+                        key, _, value = line.partition('=')
+                        key = key.strip()
+                        value = value.strip()
+                        if key and value:
+                            config[key] = value
+        except Exception as e:
+            print(f"[WARNING] Error reading Env.csh: {e}")
+
+        # Verify required keys exist, fill defaults if missing
+        defaults = {
+            'WIN_PROJECT_PATH': self.project_root,
+            'WSL_PROJECT_PATH': self._to_wsl_path(self.project_root),
+            'WSL_VENV_PATH': '.wsl_venv',
+            'WSL_DISTRO': 'Ubuntu',
+            'WSL_PYTHON_VERSION': '3.10',
+        }
+        for key, default_val in defaults.items():
+            if key not in config:
+                print(f"[WARNING] {key} not found in Env.csh, using default: {default_val}")
+                config[key] = default_val
+
+        return config
+
+    def _get_output_dir(self):
+        """Get the Output directory path, creating it if needed."""
+        os.makedirs(self.output_base_dir, exist_ok=True)
+        return self.output_base_dir
+
     def _set_default_paths(self):
         """Set default file paths based on current directory."""
-        cwd = os.getcwd()
+        cwd = self.project_root
         default_sv = os.path.join(cwd, "isp_yuv2rgb.sv")
         default_hw = os.path.join(cwd, "hw_field.txt")
 
         if os.path.exists(default_sv):
+            self.input_file_path.set(default_sv)
             self.sv_file_path.set(default_sv)
-            self.output_py_path.set(default_sv.replace(".sv", ".py"))
+            self.input_type.set("SV")
+            # Output .py goes to Output/ directory
+            base_name = os.path.splitext(os.path.basename(default_sv))[0]
+            self.output_py_path.set(
+                os.path.join(self._get_output_dir(), base_name + ".py")
+            )
 
         if os.path.exists(default_hw):
             self.hw_field_path.set(default_hw)
@@ -77,14 +158,17 @@ class SVtoPyVSCGUI:
         # File menu
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Open SV File...", command=self._browse_sv_file)
+        file_menu.add_command(label="Open SV/XML File...", command=self._browse_input_file)
         file_menu.add_command(label="Open HW Field File...", command=self._browse_hw_field)
+        file_menu.add_separator()
+        file_menu.add_command(label="Open Output Folder", command=self._open_output_folder)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
 
         # Actions menu
         actions_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Actions", menu=actions_menu)
+        actions_menu.add_command(label="Convert XML to SV", command=self._run_xml_to_sv)
         actions_menu.add_command(label="Translate SV to PyVSC", command=self._run_translation)
         actions_menu.add_command(label="Test PyVSC Randomization", command=self._run_pyvsc_test)
         actions_menu.add_command(label="Generate Test Vectors", command=self._run_vector_generation)
@@ -102,7 +186,7 @@ class SVtoPyVSCGUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Left panel - Configuration
+        # Left panel - Configuration (scrollable for more content)
         left_frame = ttk.LabelFrame(main_frame, text="Configuration", padding="10")
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=(0, 5))
 
@@ -123,17 +207,37 @@ class SVtoPyVSCGUI:
             row=row, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
         row += 1
 
-        # SV File
-        ttk.Label(parent, text="SystemVerilog File:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        # Input File (SV or XML)
+        input_label_frame = ttk.Frame(parent)
+        input_label_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=2)
+        ttk.Label(input_label_frame, text="Input File (.sv / .xml):").pack(side=tk.LEFT)
+        self.input_type_label = ttk.Label(
+            input_label_frame, textvariable=self.input_type,
+            foreground='#569cd6', font=('Helvetica', 9, 'bold'))
+        self.input_type_label.pack(side=tk.LEFT, padx=(10, 0))
         row += 1
-        sv_entry = ttk.Entry(parent, textvariable=self.sv_file_path, width=40)
-        sv_entry.grid(row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
-        ttk.Button(parent, text="Browse...", command=self._browse_sv_file).grid(
+
+        input_entry = ttk.Entry(parent, textvariable=self.input_file_path, width=40)
+        input_entry.grid(row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
+        ttk.Button(parent, text="Browse...", command=self._browse_input_file).grid(
             row=row, column=2, padx=(5, 0), pady=2)
         row += 1
 
-        # Output Python File
-        ttk.Label(parent, text="Output Python File:").grid(row=row, column=0, sticky=tk.W, pady=2)
+        # SV File (resolved path - shown when XML is selected)
+        self.sv_path_label = ttk.Label(parent, text="Resolved SV File:")
+        self.sv_path_label.grid(row=row, column=0, sticky=tk.W, pady=2)
+        row += 1
+        self.sv_path_entry = ttk.Entry(parent, textvariable=self.sv_file_path, width=40,
+                                        state='readonly')
+        self.sv_path_entry.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=2)
+        row += 1
+
+        # Output Python File (in Output/ directory)
+        output_label_frame = ttk.Frame(parent)
+        output_label_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=2)
+        ttk.Label(output_label_frame, text="Output PyVSC File:").pack(side=tk.LEFT)
+        ttk.Label(output_label_frame, text="(Output/)",
+                  foreground='#4ec9b0', font=('Helvetica', 8)).pack(side=tk.LEFT, padx=(5, 0))
         row += 1
         ttk.Entry(parent, textvariable=self.output_py_path, width=40).grid(
             row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
@@ -215,14 +319,25 @@ class SVtoPyVSCGUI:
             row=row, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
         row += 1
 
-        btn_frame = ttk.Frame(parent)
-        btn_frame.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=5)
+        # Row 1: XML Convert + Translate
+        btn_frame1 = ttk.Frame(parent)
+        btn_frame1.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=2)
 
-        ttk.Button(btn_frame, text="1. Translate", command=self._run_translation, width=15).pack(
+        self.xml_convert_btn = ttk.Button(
+            btn_frame1, text="0. XML\u2192SV", command=self._run_xml_to_sv, width=15)
+        self.xml_convert_btn.pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(btn_frame1, text="1. Translate", command=self._run_translation, width=15).pack(
             side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="2. Test PyVSC", command=self._run_pyvsc_test, width=15).pack(
+        ttk.Button(btn_frame1, text="2. Test PyVSC", command=self._run_pyvsc_test, width=15).pack(
             side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="3. Generate", command=self._run_vector_generation, width=15).pack(
+        row += 1
+
+        # Row 2: Generate
+        btn_frame2 = ttk.Frame(parent)
+        btn_frame2.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=2)
+
+        ttk.Button(btn_frame2, text="3. Generate", command=self._run_vector_generation, width=15).pack(
             side=tk.LEFT, padx=2)
         row += 1
 
@@ -273,22 +388,64 @@ class SVtoPyVSCGUI:
                                relief=tk.SUNKEN, anchor=tk.W, padding=(5, 2))
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def _browse_sv_file(self):
-        """Browse for SystemVerilog file."""
+    # =========================================================================
+    # File Browsing
+    # =========================================================================
+
+    def _browse_input_file(self):
+        """Browse for SystemVerilog or XML file."""
         filename = filedialog.askopenfilename(
-            title="Select SystemVerilog File",
-            filetypes=[("SystemVerilog files", "*.sv"), ("All files", "*.*")]
+            title="Select SystemVerilog or XML File",
+            filetypes=[
+                ("SV / XML files", "*.sv *.xml"),
+                ("SystemVerilog files", "*.sv"),
+                ("XML files", "*.xml"),
+                ("All files", "*.*"),
+            ]
         )
         if filename:
-            self.sv_file_path.set(filename)
-            # Auto-set output path
-            self.output_py_path.set(filename.replace(".sv", ".py"))
-            self._detect_class_name()
+            self.input_file_path.set(filename)
+            self._resolve_input_file(filename)
+
+    def _resolve_input_file(self, filepath):
+        """
+        Determine input type and set resolved paths accordingly.
+
+        If .xml: SV path = Output/<name>.sv, PyVSC path = Output/<name>.py
+        If .sv:  SV path = filepath,         PyVSC path = Output/<name>.py
+        """
+        ext = os.path.splitext(filepath)[1].lower()
+        base_name = os.path.splitext(os.path.basename(filepath))[0]
+        output_dir = self._get_output_dir()
+
+        if ext == '.xml':
+            self.input_type.set("XML")
+            # XML -> SV conversion will place .sv in Output/
+            sv_path = os.path.join(output_dir, base_name + ".sv")
+            self.sv_file_path.set(sv_path)
+            self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
+            self._log(f"XML file selected: {os.path.basename(filepath)}", 'info')
+            self._log(f"  SV output will be: {sv_path}", 'info')
+            self._log(f"  PyVSC output will be: {os.path.join(output_dir, base_name + '.py')}", 'info')
+        elif ext == '.sv':
+            self.input_type.set("SV")
+            self.sv_file_path.set(filepath)
+            self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
+            self._log(f"SV file selected: {os.path.basename(filepath)}", 'info')
+            self._log(f"  PyVSC output will be: {os.path.join(output_dir, base_name + '.py')}", 'info')
+        else:
+            self.input_type.set("N/A")
+            self.sv_file_path.set(filepath)
+            self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
+            self._log(f"Unknown file type: {ext}. Treating as SV.", 'warning')
+
+        self._detect_class_name()
 
     def _browse_output_py(self):
-        """Browse for output Python file."""
+        """Browse for output Python file (defaults to Output/ directory)."""
         filename = filedialog.asksaveasfilename(
             title="Save Python File As",
+            initialdir=self._get_output_dir(),
             defaultextension=".py",
             filetypes=[("Python files", "*.py"), ("All files", "*.*")]
         )
@@ -310,10 +467,32 @@ class SVtoPyVSCGUI:
         if dirname:
             self.output_dir.set(dirname)
 
+    def _open_output_folder(self):
+        """Open the Output folder in file explorer."""
+        output_dir = self._get_output_dir()
+        try:
+            if sys.platform == 'win32':
+                os.startfile(output_dir)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', output_dir])
+            else:
+                subprocess.Popen(['xdg-open', output_dir])
+        except Exception as e:
+            self._log(f"Could not open output folder: {e}", 'warning')
+
+    # =========================================================================
+    # Class Name Detection
+    # =========================================================================
+
     def _detect_class_name(self):
         """Detect class name from SV file."""
         sv_path = self.sv_file_path.get()
         if not sv_path or not os.path.exists(sv_path):
+            # For XML files, the SV file may not exist yet
+            # Try to detect from the XML or input file directly
+            input_path = self.input_file_path.get()
+            if input_path and os.path.exists(input_path) and input_path.lower().endswith('.xml'):
+                self._log("SV file not generated yet. Class name will be detected after XML\u2192SV conversion.", 'info')
             return
 
         try:
@@ -330,6 +509,10 @@ class SVtoPyVSCGUI:
                 self._log(f"Detected class: {class_name} -> {pascal_name}", 'info')
         except Exception as e:
             self._log(f"Could not detect class name: {e}", 'warning')
+
+    # =========================================================================
+    # Logging
+    # =========================================================================
 
     def _log(self, message, tag='info'):
         """Add message to log queue (thread-safe)."""
@@ -358,21 +541,36 @@ class SVtoPyVSCGUI:
         self.results_text.insert(tk.END, results)
         self.results_text.config(state=tk.DISABLED)
 
-    def _run_command(self, cmd, description, use_wsl=False):
+    # =========================================================================
+    # Command Execution
+    # =========================================================================
+
+    def _run_command(self, cmd, description, use_wsl=False, cwd=None):
         """Run a command and capture output."""
         self._log(f"{'='*50}", 'header')
         self._log(f"{description}", 'header')
         self._log(f"{'='*50}", 'header')
 
         if use_wsl:
-            # Convert Windows path to WSL path
-            wsl_cmd = f'wsl bash -c "cd /mnt/c/D/Project_Files/Samsung/SystemVerilogToPython && source .wsl_venv/bin/activate && {cmd}"'
+            # Read paths from Env.csh config
+            wsl_project_path = self.env_config['WSL_PROJECT_PATH']
+            wsl_venv_path = self.env_config['WSL_VENV_PATH']
+            wsl_distro = self.env_config['WSL_DISTRO']
+            wsl_cmd = (
+                f'wsl -d {wsl_distro} -- bash -lc '
+                f'"cd {wsl_project_path} '
+                f'&& source {wsl_venv_path}/bin/activate && {cmd}"'
+            )
             self._log(f"Command (WSL): {cmd}", 'command')
         else:
             wsl_cmd = cmd
             self._log(f"Command: {cmd}", 'command')
 
         self._log("")
+
+        # Determine working directory
+        if cwd is None:
+            cwd = self.project_root
 
         try:
             process = subprocess.Popen(
@@ -381,7 +579,7 @@ class SVtoPyVSCGUI:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=os.path.dirname(self.sv_file_path.get()) or os.getcwd()
+                cwd=cwd
             )
 
             # Read output line by line
@@ -409,28 +607,144 @@ class SVtoPyVSCGUI:
             self._log(f"Error running command: {e}", 'error')
             return False
 
+    def _to_wsl_path(self, win_path):
+        """Convert a Windows path to a WSL path."""
+        # e.g. C:\Users\foo\bar -> /mnt/c/Users/foo/bar
+        path = win_path.replace('\\', '/')
+        if len(path) >= 2 and path[1] == ':':
+            drive = path[0].lower()
+            path = f'/mnt/{drive}{path[2:]}'
+        return path
+
+    # =========================================================================
+    # Step 0: XML to SV Conversion
+    # =========================================================================
+
+    def _run_xml_to_sv(self):
+        """Run XML to SV conversion."""
+        input_path = self.input_file_path.get()
+
+        if not input_path or not os.path.exists(input_path):
+            messagebox.showerror("Error", "Please select a valid input file.")
+            return
+
+        if not input_path.lower().endswith('.xml'):
+            messagebox.showinfo("Info", "Input is already an SV file. Skipping XML\u2192SV conversion.")
+            return
+
+        self.status_var.set("Converting XML to SV...")
+
+        def run():
+            sv_output_path = self.sv_file_path.get()
+            xml_converter_script = os.path.join(self.project_root, "XML_to_sv_Converter.py")
+
+            if not os.path.exists(xml_converter_script):
+                self._log("ERROR: XML_to_sv_Converter.py not found in project directory!", 'error')
+                self._log(f"Expected at: {xml_converter_script}", 'error')
+                self.status_var.set("Ready")
+                return
+
+            cmd = (
+                f'python "{xml_converter_script}" '
+                f'"{input_path}" '
+                f'"{sv_output_path}"'
+            )
+            success = self._run_command(
+                cmd, "Step 0: XML to SV Conversion", use_wsl=False,
+                cwd=self.project_root
+            )
+
+            if success:
+                self._log(f"SV file generated: {sv_output_path}", 'success')
+                self._update_results(f"XML\u2192SV conversion completed!\nOutput: {sv_output_path}")
+                # Re-detect class name from the newly generated SV file
+                self._detect_class_name()
+            else:
+                self._log("XML to SV conversion failed.", 'error')
+
+            self.status_var.set("Ready")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _run_xml_to_sv_sync(self):
+        """Run XML to SV conversion synchronously (for _run_all pipeline)."""
+        input_path = self.input_file_path.get()
+
+        if not input_path.lower().endswith('.xml'):
+            self._log("Input is SV file. Skipping XML\u2192SV conversion.", 'info')
+            return True
+
+        if not input_path or not os.path.exists(input_path):
+            self._log("Error: XML file not found.", 'error')
+            return False
+
+        sv_output_path = self.sv_file_path.get()
+        xml_converter_script = os.path.join(self.project_root, "XML_to_sv_Converter.py")
+
+        if not os.path.exists(xml_converter_script):
+            self._log("ERROR: XML_to_sv_Converter.py not found in project directory!", 'error')
+            self._log(f"Expected at: {xml_converter_script}", 'error')
+            return False
+
+        cmd = (
+            f'python "{xml_converter_script}" '
+            f'"{input_path}" '
+            f'"{sv_output_path}"'
+        )
+        success = self._run_command(
+            cmd, "Step 0: XML to SV Conversion", use_wsl=False,
+            cwd=self.project_root
+        )
+
+        if success:
+            self._log(f"SV file generated: {sv_output_path}", 'success')
+            self._detect_class_name()
+
+        return success
+
+    # =========================================================================
+    # Step 1: SV to PyVSC Translation
+    # =========================================================================
+
     def _run_translation(self):
         """Run SV to PyVSC translation."""
         sv_path = self.sv_file_path.get()
         py_path = self.output_py_path.get()
 
         if not sv_path or not os.path.exists(sv_path):
-            messagebox.showerror("Error", "Please select a valid SystemVerilog file.")
+            messagebox.showerror("Error",
+                                 "SV file not found. If using XML input, run 'XML\u2192SV' first.")
             return
 
         self.status_var.set("Running translation...")
 
         def run():
-            cmd = f"python sv_to_pyvsc.py \"{os.path.basename(sv_path)}\" -o \"{os.path.basename(py_path)}\""
-            success = self._run_command(cmd, "Step 1: Translation", use_wsl=False)
-
-            if success:
-                self._update_results(f"Translation completed!\nOutput: {py_path}")
-                self._detect_class_name()
-
+            success = self._run_translation_sync()
             self.status_var.set("Ready")
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _run_translation_sync(self):
+        """Run SV to PyVSC translation synchronously."""
+        sv_path = self.sv_file_path.get()
+        py_path = self.output_py_path.get()
+
+        translator_script = os.path.join(self.project_root, "sv_to_pyvsc.py")
+        cmd = f'python "{translator_script}" "{sv_path}" -o "{py_path}"'
+        success = self._run_command(
+            cmd, "Step 1: SV to PyVSC Translation", use_wsl=False,
+            cwd=self.project_root
+        )
+
+        if success:
+            self._update_results(f"Translation completed!\nOutput: {py_path}")
+            self._detect_class_name()
+
+        return success
+
+    # =========================================================================
+    # Step 2: PyVSC Randomization Test
+    # =========================================================================
 
     def _run_pyvsc_test(self):
         """Run PyVSC randomization test."""
@@ -447,26 +761,41 @@ class SVtoPyVSCGUI:
         self.status_var.set("Running PyVSC test...")
 
         def run():
-            cmd = f"python {os.path.basename(py_path)}"
-            success = self._run_command(cmd, "Step 2: PyVSC Randomization Test", use_wsl=True)
-
-            if success:
-                self._update_results("PyVSC randomization test passed!")
-            else:
-                self._update_results("PyVSC randomization test had issues. Check log for details.")
-
+            success = self._run_pyvsc_test_sync()
             self.status_var.set("Ready")
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _run_pyvsc_test_sync(self):
+        """Run PyVSC randomization test synchronously."""
+        py_path = self.output_py_path.get()
+
+        # Convert the Output/ path to WSL-friendly path for execution
+        wsl_output_dir = self._to_wsl_path(self._get_output_dir())
+        py_filename = os.path.basename(py_path)
+
+        # Run the PyVSC file from the Output directory
+        cmd = f"cd {wsl_output_dir} && python {py_filename}"
+        success = self._run_command(
+            cmd, "Step 2: PyVSC Randomization Test (from Output/)", use_wsl=True
+        )
+
+        if success:
+            self._update_results("PyVSC randomization test passed!")
+        else:
+            self._update_results("PyVSC randomization test had issues. Check log for details.")
+
+        return success
+
+    # =========================================================================
+    # Step 3: Test Vector Generation
+    # =========================================================================
 
     def _run_vector_generation(self):
         """Run test vector generation."""
         py_path = self.output_py_path.get()
         hw_path = self.hw_field_path.get()
         class_name = self.class_name.get()
-        num_vectors = self.num_vectors.get()
-        seed = self.random_seed.get()
-        output_dir = self.output_dir.get()
 
         if not py_path or not os.path.exists(py_path):
             messagebox.showerror("Error", "Please run translation first.")
@@ -483,22 +812,52 @@ class SVtoPyVSCGUI:
         self.status_var.set("Generating test vectors...")
 
         def run():
-            module_name = os.path.basename(py_path).replace('.py', '')
-            hw_file = os.path.basename(hw_path)
-
-            cmd = f"python generate_test_vectors.py {module_name} {class_name} {hw_file} {num_vectors} {output_dir} --seed {seed}"
-            success = self._run_command(cmd, "Step 3: Test Vector Generation", use_wsl=True)
-
-            if success:
-                self._update_results(
-                    f"Test vector generation completed!\n"
-                    f"Generated: {num_vectors} vectors\n"
-                    f"Output directory: {output_dir}"
-                )
-
+            success = self._run_vector_generation_sync()
             self.status_var.set("Ready")
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _run_vector_generation_sync(self):
+        """Run test vector generation synchronously."""
+        py_path = self.output_py_path.get()
+        hw_path = self.hw_field_path.get()
+        class_name = self.class_name.get()
+        num_vectors = self.num_vectors.get()
+        seed = self.random_seed.get()
+        output_dir = self.output_dir.get()
+
+        module_name = os.path.splitext(os.path.basename(py_path))[0]
+        # Use full HW field path so WSL can find it regardless of cwd
+        wsl_hw_path = self._to_wsl_path(hw_path)
+
+        # Run from the Output directory so the module can be imported
+        wsl_output_dir = self._to_wsl_path(self._get_output_dir())
+        wsl_project_root = self._to_wsl_path(self.project_root)
+
+        # Convert output directory to WSL path if it's a Windows absolute path
+        wsl_output_arg = output_dir
+        if output_dir and len(output_dir) >= 2 and output_dir[1] == ':':
+            wsl_output_arg = self._to_wsl_path(output_dir)
+
+        cmd = (
+            f"cd {wsl_output_dir} && "
+            f"python {wsl_project_root}/generate_test_vectors.py "
+            f"{module_name} {class_name} {wsl_hw_path} {num_vectors} {wsl_output_arg} --seed {seed}"
+        )
+        success = self._run_command(cmd, "Step 3: Test Vector Generation", use_wsl=True)
+
+        if success:
+            self._update_results(
+                f"Test vector generation completed!\n"
+                f"Generated: {num_vectors} vectors\n"
+                f"Output directory: {output_dir}"
+            )
+
+        return success
+
+    # =========================================================================
+    # Run All Steps
+    # =========================================================================
 
     def _run_all(self):
         """Run all steps in sequence."""
@@ -506,28 +865,39 @@ class SVtoPyVSCGUI:
         self._clear_log()
 
         def run():
-            # Step 1: Translation
-            sv_path = self.sv_file_path.get()
-            py_path = self.output_py_path.get()
+            input_path = self.input_file_path.get()
+            is_xml = input_path.lower().endswith('.xml') if input_path else False
 
-            if not sv_path or not os.path.exists(sv_path):
-                self._log("Error: Please select a valid SystemVerilog file.", 'error')
+            if not input_path or not os.path.exists(input_path):
+                self._log("Error: Please select a valid input file (.sv or .xml).", 'error')
                 self.status_var.set("Ready")
                 return
 
-            cmd = f"python sv_to_pyvsc.py \"{os.path.basename(sv_path)}\" -o \"{os.path.basename(py_path)}\""
-            success1 = self._run_command(cmd, "Step 1: Translation", use_wsl=False)
+            # Step 0: XML to SV (only if XML input)
+            success0 = True
+            if is_xml:
+                success0 = self._run_xml_to_sv_sync()
+                if not success0:
+                    self._log("XML\u2192SV conversion failed. Stopping.", 'error')
+                    self.status_var.set("Ready")
+                    return
+
+            # Step 1: SV to PyVSC Translation
+            sv_path = self.sv_file_path.get()
+            if not sv_path or not os.path.exists(sv_path):
+                self._log(f"Error: SV file not found at {sv_path}", 'error')
+                self.status_var.set("Ready")
+                return
+
+            success1 = self._run_translation_sync()
 
             if not success1:
                 self._log("Translation failed. Stopping.", 'error')
                 self.status_var.set("Ready")
                 return
 
-            self._detect_class_name()
-
-            # Step 2: PyVSC Test
-            cmd = f"python {os.path.basename(py_path)}"
-            success2 = self._run_command(cmd, "Step 2: PyVSC Randomization Test", use_wsl=True)
+            # Step 2: PyVSC Test (from Output/ directory)
+            success2 = self._run_pyvsc_test_sync()
 
             # Step 3: Vector Generation (if HW file exists)
             hw_path = self.hw_field_path.get()
@@ -535,14 +905,7 @@ class SVtoPyVSCGUI:
             success3 = False
 
             if hw_path and os.path.exists(hw_path) and class_name:
-                module_name = os.path.basename(py_path).replace('.py', '')
-                hw_file = os.path.basename(hw_path)
-                num_vectors = self.num_vectors.get()
-                seed = self.random_seed.get()
-                output_dir = self.output_dir.get()
-
-                cmd = f"python generate_test_vectors.py {module_name} {class_name} {hw_file} {num_vectors} {output_dir} --seed {seed}"
-                success3 = self._run_command(cmd, "Step 3: Test Vector Generation", use_wsl=True)
+                success3 = self._run_vector_generation_sync()
             else:
                 self._log("Skipping vector generation (missing HW field file or class name)", 'warning')
 
@@ -550,37 +913,56 @@ class SVtoPyVSCGUI:
             self._log("\n" + "="*50, 'header')
             self._log("SUMMARY", 'header')
             self._log("="*50, 'header')
+
+            if is_xml:
+                self._log(
+                    f"Step 0 (XML\u2192SV):         {'PASS' if success0 else 'FAIL'}",
+                    'success' if success0 else 'error')
+
             self._log(f"Step 1 (Translation):     {'PASS' if success1 else 'FAIL'}",
                       'success' if success1 else 'error')
             self._log(f"Step 2 (PyVSC Test):      {'PASS' if success2 else 'FAIL/WARNINGS'}",
                       'success' if success2 else 'warning')
             self._log(f"Step 3 (Vector Gen):      {'PASS' if success3 else 'SKIPPED/FAIL'}",
                       'success' if success3 else 'warning')
+            self._log(f"\nOutput directory: {self._get_output_dir()}", 'info')
 
-            results = f"Translation: {'PASS' if success1 else 'FAIL'}\n"
+            results = ""
+            if is_xml:
+                results += f"XML\u2192SV: {'PASS' if success0 else 'FAIL'}\n"
+            results += f"Translation: {'PASS' if success1 else 'FAIL'}\n"
             results += f"PyVSC Test: {'PASS' if success2 else 'FAIL/WARNINGS'}\n"
             results += f"Vector Generation: {'PASS' if success3 else 'SKIPPED'}\n"
+            results += f"Output: {self._get_output_dir()}"
             if success3:
-                results += f"Output: {self.output_dir.get()}"
+                results += f"\nVectors: {self.output_dir.get()}"
 
             self._update_results(results)
             self.status_var.set("Ready")
 
         threading.Thread(target=run, daemon=True).start()
 
+    # =========================================================================
+    # About
+    # =========================================================================
+
     def _show_about(self):
         """Show about dialog."""
         messagebox.showinfo(
             "About",
-            "SystemVerilog to PyVSC Translation Tool\n\n"
-            "Version: 1.0\n\n"
-            "This tool converts SystemVerilog constraint models to PyVSC Python code "
-            "and generates randomized test vectors.\n\n"
+            "SV / XML to PyVSC Translation Tool\n\n"
+            "Version: 2.0\n\n"
+            "This tool converts SystemVerilog or XML constraint models to PyVSC "
+            "Python code and generates randomized test vectors.\n\n"
+            "Pipeline:\n"
+            "  XML \u2192 SV \u2192 PyVSC (.py) \u2192 Test \u2192 Vectors\n\n"
             "Features:\n"
+            "- XML to SV conversion (via XML_to_sv_Converter.py)\n"
             "- SV to PyVSC translation\n"
             "- PyVSC randomization testing\n"
-            "- Bulk test vector generation\n\n"
-            "Developed for Design Verification"
+            "- Bulk test vector generation\n"
+            f"- All output in: Output/\n\n"
+            "Developed for Samsung Hardware Verification"
         )
 
 
