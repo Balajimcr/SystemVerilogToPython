@@ -4,6 +4,28 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 :: ============================================
+:: Derive WIN_PROJECT_PATH from script location
+:: ============================================
+:: %~dp0 has a trailing backslash, remove it
+set "WIN_PROJECT_PATH=%~dp0"
+if "%WIN_PROJECT_PATH:~-1%"=="\" set "WIN_PROJECT_PATH=%WIN_PROJECT_PATH:~0,-1%"
+
+:: ============================================
+:: Derive WSL_PROJECT_PATH from WIN_PROJECT_PATH
+:: Convert  C:\Foo\Bar  ->  /mnt/c/Foo/Bar
+:: ============================================
+:: Extract drive letter, lowercase it
+set "DRIVE_LETTER=%WIN_PROJECT_PATH:~0,1%"
+:: Lowercase the drive letter using a for trick
+for %%A in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do (
+    if /i "%DRIVE_LETTER%"=="%%A" set "DRIVE_LETTER=%%A"
+)
+:: Build the WSL path: /mnt/<drive>/<rest with forward slashes>
+set "REST_PATH=%WIN_PROJECT_PATH:~3%"
+set "REST_PATH=%REST_PATH:\=/%"
+set "WSL_PROJECT_PATH=/mnt/%DRIVE_LETTER%/%REST_PATH%"
+
+:: ============================================
 :: Read environment config from Env.csh
 :: ============================================
 set "ENV_FILE=%~dp0Env.csh"
@@ -23,12 +45,7 @@ for /f "usebackq delims=" %%L in (`
     "ForEach-Object { $k,$v = $_ -split '=',2; if($v){ $k.Trim() + '=' + $v.Trim() } }"
 `) do set "%%L"
 
-:: Verify required variables
-if not defined WSL_PROJECT_PATH (
-    echo [ERROR] WSL_PROJECT_PATH not set in Env.csh
-    pause
-    exit /b 1
-)
+:: Verify required variables from Env.csh
 if not defined WSL_VENV_PATH (
     echo [ERROR] WSL_VENV_PATH not set in Env.csh
     pause
@@ -40,37 +57,24 @@ if not defined WSL_DISTRO (
     exit /b 1
 )
 
-:: Verify expected values from Env.csh
-set "EXPECTED_WSL_PROJECT_PATH=/mnt/c/D/Project_Files/Samsung/SystemVerilogToPython"
-set "EXPECTED_WSL_VENV_PATH=.wsl_venv"
-set "EXPECTED_WSL_DISTRO=Ubuntu"
+:: ============================================
+:: Auto-update Env.csh paths to match current directory
+:: ============================================
+:: Update WIN_PROJECT_PATH in Env.csh to current script location
+powershell -NoProfile -Command ^
+    "$f = '%ENV_FILE%';" ^
+    "$lines = Get-Content -LiteralPath $f;" ^
+    "$newWin = '%WIN_PROJECT_PATH%';" ^
+    "$newWsl = '%WSL_PROJECT_PATH%';" ^
+    "$lines = $lines -replace '^(WIN_PROJECT_PATH\s*=\s*).*$', \"$('$1')$newWin\";" ^
+    "$lines = $lines -replace '^(WSL_PROJECT_PATH\s*=\s*).*$', \"$('$1')$newWsl\";" ^
+    "Set-Content -LiteralPath $f -Value $lines"
 
-if /i not "%WSL_PROJECT_PATH%"=="%EXPECTED_WSL_PROJECT_PATH%" (
-    echo [ERROR] WSL_PROJECT_PATH mismatch.
-    echo   Expected: %EXPECTED_WSL_PROJECT_PATH%
-    echo   Found:    %WSL_PROJECT_PATH%
-    pause
-    exit /b 1
-)
-if /i not "%WSL_VENV_PATH%"=="%EXPECTED_WSL_VENV_PATH%" (
-    echo [ERROR] WSL_VENV_PATH mismatch.
-    echo   Expected: %EXPECTED_WSL_VENV_PATH%
-    echo   Found:    %WSL_VENV_PATH%
-    pause
-    exit /b 1
-)
-if /i not "%WSL_DISTRO%"=="%EXPECTED_WSL_DISTRO%" (
-    echo [ERROR] WSL_DISTRO mismatch.
-    echo   Expected: %EXPECTED_WSL_DISTRO%
-    echo   Found:    %WSL_DISTRO%
-    pause
-    exit /b 1
-)
-
-echo Using paths from Env.csh:
-echo   WSL_PROJECT_PATH = %WSL_PROJECT_PATH%
-echo   WSL_VENV_PATH    = %WSL_VENV_PATH%
-echo   WSL_DISTRO       = %WSL_DISTRO%
+echo Using configuration:
+echo   WIN_PROJECT_PATH = %WIN_PROJECT_PATH%  (auto-detected)
+echo   WSL_PROJECT_PATH = %WSL_PROJECT_PATH%  (derived from Windows path)
+echo   WSL_VENV_PATH    = %WSL_VENV_PATH%     (from Env.csh)
+echo   WSL_DISTRO       = %WSL_DISTRO%        (from Env.csh)
 echo.
 
 echo ============================================
