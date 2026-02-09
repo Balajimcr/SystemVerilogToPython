@@ -11,22 +11,31 @@ rem --------------------------------------------------------------------
 set "WIN_DIR=%~dp0"
 if "%WIN_DIR:~-1%"=="\" set "WIN_DIR=%WIN_DIR:~0,-1%"
 
+rem Print Windows path to console
+echo Windows script directory: "%WIN_DIR%"
+
 rem Basic validation: ensure the Windows directory exists
 if not exist "%WIN_DIR%\" (
     echo Error: script directory does not exist: "%WIN_DIR%"
     exit /b 1
 )
 
+rem Extract drive letter and path without drive
 set "DRIVE_LETTER=%WIN_DIR:~0,1%"
 set "PATH_NO_DRIVE=%WIN_DIR:~3%"
-set "UNIX_PATH=%PATH_NO_DRIVE:\=/=%"
+
+rem Convert drive letter to lowercase using PowerShell (for /mnt/<lowercase>)
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "'%DRIVE_LETTER%'.ToLower()"`) do set "DRIVE_LETTER=%%L"
+
+set "UNIX_PATH=%PATH_NO_DRIVE:\=/"
 set "WSL_PROJECT_DIR=/mnt/%DRIVE_LETTER%/%UNIX_PATH%"
 
+rem Print computed WSL path to console
 echo Computed WSL project directory: %WSL_PROJECT_DIR%
 
 rem Verify the WSL path exists by asking WSL to test it. If it does not exist,
 rem print a helpful error and exit early.
-wsl -d Ubuntu -- bash -lc "if [ ! -d '%WSL_PROJECT_DIR%' ]; then echo 'Error: WSL project directory not found: %WSL_PROJECT_DIR%'; exit 2; fi"
+wsl -d Ubuntu -- bash -lc "if [ ! -d '%WSL_PROJECT_DIR%' ]; then echo 'Error: WSL project directory not found: %WSL_PROJECT_DIR%'; exit 2; else echo 'WSL path validated: %WSL_PROJECT_DIR%'; fi"
 if ERRORLEVEL 1 (
     echo Aborting: WSL project directory validation failed.
     exit /b 1
