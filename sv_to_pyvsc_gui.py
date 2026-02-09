@@ -327,23 +327,32 @@ class SVtoPyVSCGUI:
             btn_frame1, text="0. XML\u2192SV", command=self._run_xml_to_sv, width=15)
         self.xml_convert_btn.pack(side=tk.LEFT, padx=2)
 
-        ttk.Button(btn_frame1, text="1. Translate", command=self._run_translation, width=15).pack(
-            side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame1, text="2. Test PyVSC", command=self._run_pyvsc_test, width=15).pack(
-            side=tk.LEFT, padx=2)
+        self.translate_btn = ttk.Button(
+            btn_frame1, text="1. Translate", command=self._run_translation, width=15)
+        self.translate_btn.pack(side=tk.LEFT, padx=2)
+        self.test_btn = ttk.Button(
+            btn_frame1, text="2. Test PyVSC", command=self._run_pyvsc_test, width=15)
+        self.test_btn.pack(side=tk.LEFT, padx=2)
         row += 1
 
         # Row 2: Generate
         btn_frame2 = ttk.Frame(parent)
         btn_frame2.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=2)
 
-        ttk.Button(btn_frame2, text="3. Generate", command=self._run_vector_generation, width=15).pack(
-            side=tk.LEFT, padx=2)
+        self.generate_btn = ttk.Button(
+            btn_frame2, text="3. Generate", command=self._run_vector_generation, width=15)
+        self.generate_btn.pack(side=tk.LEFT, padx=2)
         row += 1
 
         # Run All button
-        run_all_btn = ttk.Button(parent, text="Run All Steps", command=self._run_all, width=47)
-        run_all_btn.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        self.run_all_btn = ttk.Button(parent, text="Run All Steps", command=self._run_all, width=47)
+        self.run_all_btn.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
+
+        # Collect all action buttons for state management
+        self._action_buttons = [
+            self.xml_convert_btn, self.translate_btn,
+            self.test_btn, self.generate_btn, self.run_all_btn,
+        ]
         row += 1
 
         # Clear Log button
@@ -534,6 +543,18 @@ class SVtoPyVSCGUI:
         """Clear log output."""
         self.log_text.delete(1.0, tk.END)
 
+    def _set_buttons_state(self, state):
+        """Enable or disable all action buttons (thread-safe via root.after).
+
+        Args:
+            state: 'normal' to enable, 'disabled' to disable.
+        """
+        def _apply():
+            for btn in self._action_buttons:
+                btn.config(state=state)
+        # Schedule on main thread — Tk widgets must only be touched there
+        self.root.after_idle(_apply)
+
     def _update_results(self, results):
         """Update results summary."""
         self.results_text.config(state=tk.NORMAL)
@@ -573,27 +594,38 @@ class SVtoPyVSCGUI:
             cwd = self.project_root
 
         try:
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+
             process = subprocess.Popen(
                 wsl_cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=cwd
+                cwd=cwd,
+                env=env,
+                bufsize=1        # line-buffered on the reading side
             )
 
-            # Read output line by line
-            for line in process.stdout:
-                line = line.rstrip()
-                if 'error' in line.lower() or 'exception' in line.lower():
-                    self._log(line, 'error')
-                elif 'warning' in line.lower():
-                    self._log(line, 'warning')
-                elif 'success' in line.lower() or 'complete' in line.lower():
-                    self._log(line, 'success')
-                else:
-                    self._log(line, 'info')
+            # Read output on a dedicated thread so the caller is not
+            # blocked by slow I/O and the GUI stays responsive.
+            def _reader():
+                for line in process.stdout:
+                    line = line.rstrip()
+                    lower = line.lower()
+                    if 'error' in lower or 'exception' in lower:
+                        self._log(line, 'error')
+                    elif 'warning' in lower:
+                        self._log(line, 'warning')
+                    elif 'success' in lower or 'complete' in lower:
+                        self._log(line, 'success')
+                    else:
+                        self._log(line, 'info')
 
+            reader_thread = threading.Thread(target=_reader, daemon=True)
+            reader_thread.start()
+            reader_thread.join()        # wait for all output to be read
             process.wait()
 
             if process.returncode == 0:
@@ -633,36 +665,38 @@ class SVtoPyVSCGUI:
             return
 
         self.status_var.set("Converting XML to SV...")
+        self._set_buttons_state('disabled')
 
         def run():
-            sv_output_path = self.sv_file_path.get()
-            xml_converter_script = os.path.join(self.project_root, "XML_to_sv_Converter.py")
+            try:
+                sv_output_path = self.sv_file_path.get()
+                xml_converter_script = os.path.join(self.project_root, "XML_to_sv_Converter.py")
 
-            if not os.path.exists(xml_converter_script):
-                self._log("ERROR: XML_to_sv_Converter.py not found in project directory!", 'error')
-                self._log(f"Expected at: {xml_converter_script}", 'error')
+                if not os.path.exists(xml_converter_script):
+                    self._log("ERROR: XML_to_sv_Converter.py not found in project directory!", 'error')
+                    self._log(f"Expected at: {xml_converter_script}", 'error')
+                    return
+
+                cmd = (
+                    f'python "{xml_converter_script}" '
+                    f'"{input_path}" '
+                    f'"{sv_output_path}"'
+                )
+                success = self._run_command(
+                    cmd, "Step 0: XML to SV Conversion", use_wsl=False,
+                    cwd=self.project_root
+                )
+
+                if success:
+                    self._log(f"SV file generated: {sv_output_path}", 'success')
+                    self._update_results(f"XML\u2192SV conversion completed!\nOutput: {sv_output_path}")
+                    # Re-detect class name from the newly generated SV file
+                    self._detect_class_name()
+                else:
+                    self._log("XML to SV conversion failed.", 'error')
+            finally:
                 self.status_var.set("Ready")
-                return
-
-            cmd = (
-                f'python "{xml_converter_script}" '
-                f'"{input_path}" '
-                f'"{sv_output_path}"'
-            )
-            success = self._run_command(
-                cmd, "Step 0: XML to SV Conversion", use_wsl=False,
-                cwd=self.project_root
-            )
-
-            if success:
-                self._log(f"SV file generated: {sv_output_path}", 'success')
-                self._update_results(f"XML\u2192SV conversion completed!\nOutput: {sv_output_path}")
-                # Re-detect class name from the newly generated SV file
-                self._detect_class_name()
-            else:
-                self._log("XML to SV conversion failed.", 'error')
-
-            self.status_var.set("Ready")
+                self._set_buttons_state('normal')
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -717,10 +751,14 @@ class SVtoPyVSCGUI:
             return
 
         self.status_var.set("Running translation...")
+        self._set_buttons_state('disabled')
 
         def run():
-            success = self._run_translation_sync()
-            self.status_var.set("Ready")
+            try:
+                success = self._run_translation_sync()
+            finally:
+                self.status_var.set("Ready")
+                self._set_buttons_state('normal')
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -759,10 +797,14 @@ class SVtoPyVSCGUI:
             self.use_wsl.set(True)
 
         self.status_var.set("Running PyVSC test...")
+        self._set_buttons_state('disabled')
 
         def run():
-            success = self._run_pyvsc_test_sync()
-            self.status_var.set("Ready")
+            try:
+                success = self._run_pyvsc_test_sync()
+            finally:
+                self.status_var.set("Ready")
+                self._set_buttons_state('normal')
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -810,10 +852,14 @@ class SVtoPyVSCGUI:
             return
 
         self.status_var.set("Generating test vectors...")
+        self._set_buttons_state('disabled')
 
         def run():
-            success = self._run_vector_generation_sync()
-            self.status_var.set("Ready")
+            try:
+                success = self._run_vector_generation_sync()
+            finally:
+                self.status_var.set("Ready")
+                self._set_buttons_state('normal')
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -862,83 +908,83 @@ class SVtoPyVSCGUI:
     def _run_all(self):
         """Run all steps in sequence."""
         self.status_var.set("Running all steps...")
+        self._set_buttons_state('disabled')
         self._clear_log()
 
         def run():
-            input_path = self.input_file_path.get()
-            is_xml = input_path.lower().endswith('.xml') if input_path else False
+            try:
+                input_path = self.input_file_path.get()
+                is_xml = input_path.lower().endswith('.xml') if input_path else False
 
-            if not input_path or not os.path.exists(input_path):
-                self._log("Error: Please select a valid input file (.sv or .xml).", 'error')
-                self.status_var.set("Ready")
-                return
-
-            # Step 0: XML to SV (only if XML input)
-            success0 = True
-            if is_xml:
-                success0 = self._run_xml_to_sv_sync()
-                if not success0:
-                    self._log("XML\u2192SV conversion failed. Stopping.", 'error')
-                    self.status_var.set("Ready")
+                if not input_path or not os.path.exists(input_path):
+                    self._log("Error: Please select a valid input file (.sv or .xml).", 'error')
                     return
 
-            # Step 1: SV to PyVSC Translation
-            sv_path = self.sv_file_path.get()
-            if not sv_path or not os.path.exists(sv_path):
-                self._log(f"Error: SV file not found at {sv_path}", 'error')
+                # Step 0: XML to SV (only if XML input)
+                success0 = True
+                if is_xml:
+                    success0 = self._run_xml_to_sv_sync()
+                    if not success0:
+                        self._log("XML\u2192SV conversion failed. Stopping.", 'error')
+                        return
+
+                # Step 1: SV to PyVSC Translation
+                sv_path = self.sv_file_path.get()
+                if not sv_path or not os.path.exists(sv_path):
+                    self._log(f"Error: SV file not found at {sv_path}", 'error')
+                    return
+
+                success1 = self._run_translation_sync()
+
+                if not success1:
+                    self._log("Translation failed. Stopping.", 'error')
+                    return
+
+                # Step 2: PyVSC Test (from Output/ directory)
+                success2 = self._run_pyvsc_test_sync()
+
+                # Step 3: Vector Generation (if HW file exists)
+                hw_path = self.hw_field_path.get()
+                class_name = self.class_name.get()
+                success3 = False
+
+                if hw_path and os.path.exists(hw_path) and class_name:
+                    success3 = self._run_vector_generation_sync()
+                else:
+                    self._log("Skipping vector generation (missing HW field file or class name)", 'warning')
+
+                # Summary
+                self._log("\n" + "="*50, 'header')
+                self._log("SUMMARY", 'header')
+                self._log("="*50, 'header')
+
+                if is_xml:
+                    self._log(
+                        f"Step 0 (XML\u2192SV):         {'PASS' if success0 else 'FAIL'}",
+                        'success' if success0 else 'error')
+
+                self._log(f"Step 1 (Translation):     {'PASS' if success1 else 'FAIL'}",
+                          'success' if success1 else 'error')
+                self._log(f"Step 2 (PyVSC Test):      {'PASS' if success2 else 'FAIL/WARNINGS'}",
+                          'success' if success2 else 'warning')
+                self._log(f"Step 3 (Vector Gen):      {'PASS' if success3 else 'SKIPPED/FAIL'}",
+                          'success' if success3 else 'warning')
+                self._log(f"\nOutput directory: {self._get_output_dir()}", 'info')
+
+                results = ""
+                if is_xml:
+                    results += f"XML\u2192SV: {'PASS' if success0 else 'FAIL'}\n"
+                results += f"Translation: {'PASS' if success1 else 'FAIL'}\n"
+                results += f"PyVSC Test: {'PASS' if success2 else 'FAIL/WARNINGS'}\n"
+                results += f"Vector Generation: {'PASS' if success3 else 'SKIPPED'}\n"
+                results += f"Output: {self._get_output_dir()}"
+                if success3:
+                    results += f"\nVectors: {self.output_dir.get()}"
+
+                self._update_results(results)
+            finally:
                 self.status_var.set("Ready")
-                return
-
-            success1 = self._run_translation_sync()
-
-            if not success1:
-                self._log("Translation failed. Stopping.", 'error')
-                self.status_var.set("Ready")
-                return
-
-            # Step 2: PyVSC Test (from Output/ directory)
-            success2 = self._run_pyvsc_test_sync()
-
-            # Step 3: Vector Generation (if HW file exists)
-            hw_path = self.hw_field_path.get()
-            class_name = self.class_name.get()
-            success3 = False
-
-            if hw_path and os.path.exists(hw_path) and class_name:
-                success3 = self._run_vector_generation_sync()
-            else:
-                self._log("Skipping vector generation (missing HW field file or class name)", 'warning')
-
-            # Summary
-            self._log("\n" + "="*50, 'header')
-            self._log("SUMMARY", 'header')
-            self._log("="*50, 'header')
-
-            if is_xml:
-                self._log(
-                    f"Step 0 (XML\u2192SV):         {'PASS' if success0 else 'FAIL'}",
-                    'success' if success0 else 'error')
-
-            self._log(f"Step 1 (Translation):     {'PASS' if success1 else 'FAIL'}",
-                      'success' if success1 else 'error')
-            self._log(f"Step 2 (PyVSC Test):      {'PASS' if success2 else 'FAIL/WARNINGS'}",
-                      'success' if success2 else 'warning')
-            self._log(f"Step 3 (Vector Gen):      {'PASS' if success3 else 'SKIPPED/FAIL'}",
-                      'success' if success3 else 'warning')
-            self._log(f"\nOutput directory: {self._get_output_dir()}", 'info')
-
-            results = ""
-            if is_xml:
-                results += f"XML\u2192SV: {'PASS' if success0 else 'FAIL'}\n"
-            results += f"Translation: {'PASS' if success1 else 'FAIL'}\n"
-            results += f"PyVSC Test: {'PASS' if success2 else 'FAIL/WARNINGS'}\n"
-            results += f"Vector Generation: {'PASS' if success3 else 'SKIPPED'}\n"
-            results += f"Output: {self._get_output_dir()}"
-            if success3:
-                results += f"\nVectors: {self.output_dir.get()}"
-
-            self._update_results(results)
-            self.status_var.set("Ready")
+                self._set_buttons_state('normal')
 
         threading.Thread(target=run, daemon=True).start()
 
