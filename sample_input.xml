@@ -2,6 +2,49 @@
 <FunctionMap IP="isp_yuv2rgb">
 
     <!-- ================================================================ -->
+    <!-- Top-level parameters (excluded from SV random class,             -->
+    <!-- exported to CSV for external range control)                      -->
+    <!-- ================================================================ -->
+
+    <TopParameter>
+        <Parameter name="IsBypassMode">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1</MaxValue>
+            <TestConstraint>
+                $ inside {0, 1};
+            </TestConstraint>
+        </Parameter>
+
+        <Parameter name="IsYuvFormat">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>5</MaxValue>
+            <TestConstraint>
+                $ inside {0,1,2,3,4,5};
+            </TestConstraint>
+        </Parameter>
+
+        <Parameter name="IsImageWidth">
+            <NormalValue>1920</NormalValue>
+            <MinValue>64</MinValue>
+            <MaxValue>16384</MaxValue>
+        </Parameter>
+
+        <Parameter name="IsImageHeight">
+            <NormalValue>1080</NormalValue>
+            <MinValue>64</MinValue>
+            <MaxValue>16384</MaxValue>
+        </Parameter>
+
+        <Parameter name="IsGridMode">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1</MaxValue>
+        </Parameter>
+    </TopParameter>
+
+    <!-- ================================================================ -->
     <!-- Core controls -->
     <!-- ================================================================ -->
 

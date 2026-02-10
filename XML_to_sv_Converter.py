@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import csv
 import re
 import sys
 from bisect import bisect_left
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # Precompiled regex patterns for performance
 _PATTERN_MIN_VALUE = re.compile(r"<MinValue>(.+?)</MinValue>")
 _PATTERN_MAX_VALUE = re.compile(r"<MaxValue>(.+?)</MaxValue>")
+_PATTERN_NORMAL_VALUE = re.compile(r"<NormalValue>(.+?)</NormalValue>")
 _PATTERN_PARAM_NAME = re.compile(r'<Parameter[^>]*name="([^"]+)"')
 _PATTERN_FIELD_NAME = re.compile(r'<Field[^>]*name="([^"]+)"')
 _PATTERN_TC_END = re.compile(r"</TestConstraint>")
@@ -112,6 +114,174 @@ def _extract_test_constraints(block: List[str]) -> List[str]:
 
 
 # -----------------------------------------------------------------------------
+# TopParameter data structure
+# -----------------------------------------------------------------------------
+
+class TopParamInfo:
+    """Holds metadata for a single top-level parameter extracted from XML."""
+    __slots__ = ("name", "normal_value", "min_value", "max_value",
+                 "override_min", "override_max", "test_constraints")
+
+    def __init__(
+        self,
+        name: str,
+        normal_value: str = "0",
+        min_value: str = "0",
+        max_value: str = "0",
+        test_constraints: Optional[List[str]] = None,
+    ) -> None:
+        self.name = name
+        self.normal_value = normal_value
+        self.min_value = min_value
+        self.max_value = max_value
+        # Override columns: user edits these in the CSV to control ranges
+        self.override_min = min_value
+        self.override_max = max_value
+        self.test_constraints = test_constraints or []
+
+
+def _extract_top_param_from_block(block: List[str]) -> Optional[TopParamInfo]:
+    """Extract a TopParamInfo from a <Parameter> block inside <TopParameter>."""
+    name = _extract_name_from_block(block, is_field=False)
+    if name is None:
+        return None
+
+    min_val = "0"
+    max_val = "0"
+    normal_val = "0"
+
+    for stmt in block:
+        m = _PATTERN_MIN_VALUE.search(stmt)
+        if m:
+            min_val = m.group(1).strip()
+        m = _PATTERN_MAX_VALUE.search(stmt)
+        if m:
+            max_val = m.group(1).strip()
+        m = _PATTERN_NORMAL_VALUE.search(stmt)
+        if m:
+            normal_val = m.group(1).strip()
+
+    # Extract TestConstraint bodies (reuse existing function)
+    tc_body = _extract_test_constraints(block)
+    # Replace $ placeholders with the field name
+    tc_lines = [c.replace("$", name).strip() for c in tc_body if c.strip()]
+
+    return TopParamInfo(
+        name=name,
+        normal_value=normal_val,
+        min_value=min_val,
+        max_value=max_val,
+        test_constraints=tc_lines,
+    )
+
+
+def _extract_top_parameters(xml: List[str]) -> Tuple[List[TopParamInfo], List[Tuple[int, int]]]:
+    """Scan the XML for <TopParameter> sections.
+
+    Returns:
+        top_params  : List of TopParamInfo objects.
+        span_ranges : List of (start_line, end_line) inclusive indices for each
+                      <TopParameter>…</TopParameter> block so the caller can
+                      skip those lines during regular parameter collection.
+    """
+    top_params: List[TopParamInfo] = []
+    span_ranges: List[Tuple[int, int]] = []
+
+    i = 0
+    while i < len(xml):
+        stripped = xml[i].strip()
+        if stripped.startswith("<TopParameter") and not stripped.startswith("</TopParameter"):
+            block_start = i
+            # Find matching </TopParameter>
+            j = i + 1
+            while j < len(xml):
+                if xml[j].strip().startswith("</TopParameter"):
+                    break
+                j += 1
+            block_end = j
+            span_ranges.append((block_start, block_end))
+
+            # Now parse individual <Parameter> blocks inside
+            inner = xml[block_start + 1 : block_end]
+            param_close_idx = _build_close_index(inner, "</Parameter>")
+            for k, line in enumerate(inner):
+                if _PATTERN_PARAM_NAME.search(line):
+                    end_idx = _find_close(param_close_idx, k + 1)
+                    if end_idx == -1:
+                        end_idx = len(inner) - 1
+                    param_block = inner[k : end_idx + 1]
+                    info = _extract_top_param_from_block(param_block)
+                    if info is not None:
+                        top_params.append(info)
+
+            i = block_end + 1
+        else:
+            i += 1
+
+    return top_params, span_ranges
+
+
+def export_top_params_csv(
+    top_params: List[TopParamInfo],
+    csv_path: str,
+) -> None:
+    """Write the TopParameter list to a CSV file.
+
+    CSV columns:
+        Name, NormalValue, MinValue, MaxValue, OverrideMin, OverrideMax, TestConstraint
+
+    The user can edit OverrideMin / OverrideMax to narrow or shift the
+    randomization ranges.  The tool reads these overrides back at runtime.
+    """
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Name", "NormalValue", "MinValue", "MaxValue",
+            "OverrideMin", "OverrideMax", "TestConstraint",
+        ])
+        for p in top_params:
+            tc_str = " ; ".join(p.test_constraints) if p.test_constraints else ""
+            writer.writerow([
+                p.name,
+                p.normal_value,
+                p.min_value,
+                p.max_value,
+                p.override_min,
+                p.override_max,
+                tc_str,
+            ])
+    print(f"TopParameter CSV exported: {csv_path}  ({len(top_params)} entries)")
+
+
+def load_top_params_csv(csv_path: str) -> List[TopParamInfo]:
+    """Read a TopParameter CSV (previously exported by *export_top_params_csv*).
+
+    Returns a list of TopParamInfo objects with *override_min* and
+    *override_max* populated from the CSV's OverrideMin / OverrideMax columns.
+    """
+    params: List[TopParamInfo] = []
+    with open(csv_path, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row.get("Name", "").strip()
+            if not name:
+                continue
+            info = TopParamInfo(
+                name=name,
+                normal_value=row.get("NormalValue", "0").strip(),
+                min_value=row.get("MinValue", "0").strip(),
+                max_value=row.get("MaxValue", "0").strip(),
+            )
+            info.override_min = row.get("OverrideMin", info.min_value).strip()
+            info.override_max = row.get("OverrideMax", info.max_value).strip()
+            tc_str = row.get("TestConstraint", "").strip()
+            if tc_str:
+                info.test_constraints = [c.strip() for c in tc_str.split(";") if c.strip()]
+            params.append(info)
+    return params
+
+
+# -----------------------------------------------------------------------------
 # Block processing — returns classified output directly
 # (rand_decls, uvm_fields, range_constraints, test_constraints)
 # This eliminates the post-hoc _classify_and_collect_lines re-scan.
@@ -199,8 +369,13 @@ def _find_close(indices: List[int], start: int) -> int:
     return indices[pos] if pos < len(indices) else -1
 
 
-def generate_rand_item(xml_path: str, sv_path: str) -> None:
-    """Parse xml_path and write the generated UVM random-item class to sv_path."""
+def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> None:
+    """Parse xml_path and write the generated UVM random-item class to sv_path.
+
+    If *top_csv_path* is provided (or defaults to ``<sv_stem>_top_params.csv``
+    next to *sv_path*), any ``<TopParameter>`` groups are extracted, exported
+    to the CSV, and **excluded** from the SV random class.
+    """
     # Read XML file
     print(f"Processing file: {xml_path} …", end=" ")
     try:
@@ -214,6 +389,24 @@ def generate_rand_item(xml_path: str, sv_path: str) -> None:
     # Decode XML entities
     xml = _decode_entities(raw_xml)
 
+    # --- TopParameter extraction (Phase 1) ---
+    top_params, top_spans = _extract_top_parameters(xml)
+    if top_params:
+        # Build set of line indices that belong to TopParameter sections
+        top_line_set: set = set()
+        for start, end in top_spans:
+            top_line_set.update(range(start, end + 1))
+        print(f"  Found {len(top_params)} TopParameter(s): "
+              f"{', '.join(p.name for p in top_params)}")
+
+        # Default CSV path: alongside SV output
+        if not top_csv_path:
+            sv_stem = Path(sv_path).stem
+            top_csv_path = str(Path(sv_path).parent / f"{sv_stem}_top_params.csv")
+        export_top_params_csv(top_params, top_csv_path)
+    else:
+        top_line_set = set()
+
     # Scan for IP name and collect Parameter/Field blocks
     ip_name = ""
     param_blocks: List[List[str]] = []
@@ -225,6 +418,10 @@ def generate_rand_item(xml_path: str, sv_path: str) -> None:
     field_close_idx = _build_close_index(xml, "</Field>")
 
     for i, line in enumerate(xml):
+        # Skip lines inside TopParameter sections
+        if i in top_line_set:
+            continue
+
         # Extract IP name
         if 'FunctionMap IP' in line:
             ip_name = line.split('"')[1].lower()
@@ -242,7 +439,9 @@ def generate_rand_item(xml_path: str, sv_path: str) -> None:
             end_idx = _find_close(param_close_idx, i + 1)
             if end_idx == -1:
                 end_idx = len(xml)
-            param_blocks.append(xml[i:end_idx + 1])
+            # Ensure the entire param block is outside TopParameter
+            if not any(idx in top_line_set for idx in range(i, end_idx + 1)):
+                param_blocks.append(xml[i:end_idx + 1])
 
         # Collect Field blocks
         if 'Field name' in line:
@@ -294,6 +493,7 @@ def generate_rand_item(xml_path: str, sv_path: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit("Usage: python xml_to_rand.py <source_xml> <dest_sv>")
-    generate_rand_item(sys.argv[1], sys.argv[2])
+    if len(sys.argv) < 3:
+        sys.exit("Usage: python XML_to_sv_Converter.py <source_xml> <dest_sv> [top_params.csv]")
+    csv_out = sys.argv[3] if len(sys.argv) > 3 else ""
+    generate_rand_item(sys.argv[1], sys.argv[2], csv_out)

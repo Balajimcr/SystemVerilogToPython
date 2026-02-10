@@ -41,7 +41,7 @@ from typing import Dict, List, Optional, Tuple
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # Use python3 on Linux, python on Windows
 _PYTHON = "python3" if sys.platform != "win32" else "python"
@@ -242,6 +242,7 @@ class ConsoleRunner:
             "random_seed": self.random_seed,
             "output_dir": self.output_dir,
             "use_wsl": self.use_wsl,
+            "top_params_csv": self.top_params_csv,
         }
         try:
             with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -282,12 +283,20 @@ class ConsoleRunner:
             args.use_wsl if args.use_wsl is not None else saved.get("use_wsl", default_wsl)
         )
 
+        # TopParameter CSV path
+        self.top_params_csv: str = (
+            args.top_params
+            or saved.get("top_params_csv", "")
+        )
+
         # Resolve relative paths to absolute (critical for WSL commands
         # that cd into Output/ — relative paths would break).
         if self.input_file_path and not os.path.isabs(self.input_file_path):
             self.input_file_path = os.path.abspath(self.input_file_path)
         if self.hw_field_path and not os.path.isabs(self.hw_field_path):
             self.hw_field_path = os.path.abspath(self.hw_field_path)
+        if self.top_params_csv and not os.path.isabs(self.top_params_csv):
+            self.top_params_csv = os.path.abspath(self.top_params_csv)
 
     # -----------------------------------------------------------------
     # Path Utilities
@@ -445,6 +454,7 @@ class ConsoleRunner:
         self._log(f"  Num vectors  : {self.num_vectors}")
         self._log(f"  Random seed  : {self.random_seed}")
         self._log(f"  Output dir   : {self.output_dir}")
+        self._log(f"  Top params   : {self.top_params_csv or '(none)'}")
         self._log(f"  Platform     : {sys.platform}")
         self._log(f"  Use WSL      : {self.use_wsl}")
         if self.use_wsl:
@@ -607,7 +617,12 @@ class ConsoleRunner:
             result.error_msg = "Converter script missing"
             return result
 
-        cmd = f'{_PYTHON} "{converter}" "{self.input_file_path}" "{self.sv_file_path}"'
+        # Auto-derive TopParameter CSV path alongside the SV output
+        auto_csv = os.path.join(
+            os.path.dirname(self.sv_file_path),
+            os.path.splitext(os.path.basename(self.sv_file_path))[0] + "_top_params.csv",
+        )
+        cmd = f'{_PYTHON} "{converter}" "{self.input_file_path}" "{self.sv_file_path}" "{auto_csv}"'
 
         self._print_step_header(0, STEP_NAMES[0])
         success, elapsed = self._run_command(cmd, STEP_NAMES[0], use_wsl=False)
@@ -616,6 +631,10 @@ class ConsoleRunner:
 
         if success:
             self._log(f"SV file generated: {self.sv_file_path}", "success")
+            # Auto-set top_params_csv if the CSV was created
+            if os.path.exists(auto_csv):
+                self.top_params_csv = auto_csv
+                self._log(f"TopParameter CSV: {auto_csv}", "success")
             detected = self._detect_class_name()
             if detected:
                 self.class_name = detected
@@ -698,6 +717,14 @@ class ConsoleRunner:
         module_name = os.path.splitext(os.path.basename(self.output_py_path))[0]
         generator = os.path.join(self.project_root, "generate_test_vectors.py")
 
+        # Build --top-params argument if CSV is available
+        top_params_arg = ""
+        if self.top_params_csv and os.path.exists(self.top_params_csv):
+            if self.use_wsl:
+                top_params_arg = f" --top-params {self._to_wsl_path(self.top_params_csv)}"
+            else:
+                top_params_arg = f' --top-params "{self.top_params_csv}"'
+
         if self.use_wsl:
             wsl_hw_path = self._to_wsl_path(self.hw_field_path)
             wsl_output_dir = self._to_wsl_path(self.output_base_dir)
@@ -712,6 +739,7 @@ class ConsoleRunner:
                 f"python {wsl_project_root}/generate_test_vectors.py "
                 f"{module_name} {self.class_name} {wsl_hw_path} "
                 f"{self.num_vectors} {wsl_output_arg} --seed {self.random_seed}"
+                f"{top_params_arg}"
             )
         else:
             # Native Linux: run directly from the Output directory
@@ -720,6 +748,7 @@ class ConsoleRunner:
                 f"{module_name} {self.class_name} "
                 f'"{self.hw_field_path}" '
                 f"{self.num_vectors} {self.output_dir} --seed {self.random_seed}"
+                f"{top_params_arg}"
             )
 
         self._print_step_header(3, STEP_NAMES[3])
@@ -826,6 +855,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hw-field", default=None, help="Path to hw_field.txt")
     parser.add_argument(
         "-o", "--output-dir", default=None, help="Output directory for test vectors"
+    )
+    parser.add_argument(
+        "--top-params", default=None, metavar="CSV",
+        help="TopParameter CSV for range overrides (auto-detected from XML step)",
     )
 
     # Test-vector parameters

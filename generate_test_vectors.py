@@ -37,6 +37,19 @@ from typing import List, Dict, Tuple, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass, field
 
+# TopParameter override support (optional import — module lives alongside)
+try:
+    from top_param_override import (
+        load_overrides,
+        randomize_with_overrides,
+        patch_vector_with_overrides,
+        print_override_summary,
+        OverrideSpec,
+    )
+    _HAS_TOP_PARAM = True
+except ImportError:
+    _HAS_TOP_PARAM = False
+
 
 @dataclass
 class FieldSpec:
@@ -297,10 +310,21 @@ def get_field_value(obj, field_name: str) -> Optional[Any]:
 
 
 def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
-                         field_stats: Dict[str, FieldStats]) -> Dict[str, Any]:
-    """Generate a single test vector by randomizing the object."""
+                         field_stats: Dict[str, FieldStats],
+                         top_overrides: Optional[Dict] = None) -> Dict[str, Any]:
+    """Generate a single test vector by randomizing the object.
+
+    If *top_overrides* is provided (and the top_param_override module is
+    available), overrides are applied during randomization and as a
+    post-clamp fallback.
+    """
     try:
-        obj.randomize()
+        if top_overrides and _HAS_TOP_PARAM:
+            ok = randomize_with_overrides(obj, top_overrides)
+            if not ok:
+                raise RuntimeError("randomize_with_overrides failed")
+        else:
+            obj.randomize()
     except Exception as e:
         print(f"Warning: Randomization failed for run {run_id}: {e}")
         print("  Using default/previous values")
@@ -317,6 +341,10 @@ def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
         # Collect value for statistics
         if field_name in field_stats:
             field_stats[field_name].values.append(vector[field_name])
+
+    # Apply post-clamp for any overrides (belt-and-suspenders)
+    if top_overrides and _HAS_TOP_PARAM:
+        vector = patch_vector_with_overrides(vector, top_overrides)
 
     return vector
 
@@ -604,6 +632,9 @@ Examples:
                         help='Output format (default: both)')
     parser.add_argument('--jobs', '-j', type=int, default=-1,
                         help='Number of parallel workers (default: 1, use -1 for all cores)')
+    parser.add_argument('--top-params', default=None, metavar='CSV',
+                        help='TopParameter CSV file for range overrides '
+                             '(exported by XML_to_sv_Converter)')
 
     args = parser.parse_args()
 
@@ -640,6 +671,8 @@ Examples:
     if args.seed:
         print(f"Random Seed  : {args.seed}")
     print(f"Jobs         : {args.jobs}")
+    if args.top_params:
+        print(f"Top Params   : {args.top_params}")
     print(f"=" * 50)
 
     # Parse field file
@@ -671,6 +704,32 @@ Examples:
         print(f"Error: Could not instantiate class: {e}")
         sys.exit(1)
 
+    # Load TopParameter overrides (if provided)
+    top_overrides: Dict[str, 'OverrideSpec'] = {}
+    if args.top_params:
+        if not _HAS_TOP_PARAM:
+            print("Warning: top_param_override module not found — ignoring --top-params")
+        elif not os.path.exists(args.top_params):
+            print(f"Warning: TopParameter CSV not found: {args.top_params}")
+        else:
+            top_overrides = load_overrides(args.top_params)
+            print(f"\nLoaded {len(top_overrides)} TopParameter override(s)")
+            # Show which overrides apply to this object
+            applicable = [n for n in top_overrides if hasattr(obj, n)]
+            non_applicable = [n for n in top_overrides if not hasattr(obj, n)]
+            if applicable:
+                print(f"  Applicable to model: {', '.join(applicable)}")
+            if non_applicable:
+                print(f"  Not in model (ignored): {', '.join(non_applicable)}")
+            active = [n for n, s in top_overrides.items()
+                      if s.is_overridden and n in applicable]
+            if active:
+                print(f"  Active overrides: {', '.join(active)}")
+                for n in active:
+                    s = top_overrides[n]
+                    print(f"    {n}: [{s.orig_min},{s.orig_max}] -> [{s.override_min},{s.override_max}]")
+            print_override_summary(top_overrides, show_all=True)
+
     # Resolve job count
     num_jobs = args.jobs
     if num_jobs == -1:
@@ -683,7 +742,12 @@ Examples:
     print(f"\nValidating PyVSC model (single randomize)...")
     t_val = time.perf_counter()
     try:
-        obj.randomize()
+        if top_overrides and _HAS_TOP_PARAM:
+            ok = randomize_with_overrides(obj, top_overrides)
+            if not ok:
+                raise RuntimeError("randomize_with_overrides returned False")
+        else:
+            obj.randomize()
         val_time = time.perf_counter() - t_val
         print(f"  Validation OK ({val_time:.3f}s per randomize)")
         est_serial = val_time * args.num_runs
@@ -703,6 +767,8 @@ Examples:
 
     if num_jobs > 1:
         # Parallel execution: each worker creates its own instance
+        # NOTE: TopParameter overrides are applied as post-clamp in parallel
+        # mode because workers can't share the override state easily.
         worker_args = [
             (args.pyvsc_module, args.class_name, fields, run_id, args.seed)
             for run_id in range(args.num_runs)
@@ -710,6 +776,9 @@ Examples:
         with multiprocessing.Pool(processes=num_jobs) as pool:
             for run_id, vector, elapsed, failed in pool.imap_unordered(
                     _randomize_worker, worker_args):
+                # Apply TopParameter post-clamp for parallel workers
+                if top_overrides and _HAS_TOP_PARAM:
+                    vector = patch_vector_with_overrides(vector, top_overrides)
                 vectors[run_id] = vector
                 total_solve_time += elapsed
                 if not failed:
@@ -736,7 +805,8 @@ Examples:
         # Serial execution: reuse single instance (no state accumulation issue)
         for run_id in range(args.num_runs):
             t_iter = time.perf_counter()
-            vector = generate_test_vector(obj, fields, run_id, field_stats)
+            vector = generate_test_vector(obj, fields, run_id, field_stats,
+                                          top_overrides=top_overrides)
             elapsed = time.perf_counter() - t_iter
             total_solve_time += elapsed
             vectors[run_id] = vector
