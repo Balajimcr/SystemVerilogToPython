@@ -30,6 +30,8 @@ import argparse
 import importlib
 import random
 import math
+import time
+import multiprocessing
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any
 from datetime import datetime
@@ -319,6 +321,48 @@ def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
     return vector
 
 
+def _randomize_worker(args_tuple):
+    """Worker function for parallel randomization.
+
+    Creates a fresh PyVSC instance per call to avoid any shared state.
+    Each worker independently imports the module and instantiates the class.
+    """
+    module_name, class_name, fields, run_id, seed = args_tuple
+
+    # Per-run deterministic seed
+    if seed is not None:
+        random.seed(seed + run_id)
+
+    t0 = time.perf_counter()
+
+    # Import and instantiate in worker process
+    if '.' not in sys.path:
+        sys.path.insert(0, '.')
+    module = importlib.import_module(module_name)
+    pyvsc_class = getattr(module, class_name)
+    obj = pyvsc_class()
+
+    # Randomize
+    failed = False
+    try:
+        obj.randomize()
+    except Exception as e:
+        failed = True
+        print(f"Warning: Randomization failed for run {run_id}: {e}")
+
+    # Extract field values
+    vector = {}
+    for field_name, default_value in fields:
+        value = get_field_value(obj, field_name)
+        if value is not None:
+            vector[field_name] = value
+        else:
+            vector[field_name] = default_value
+
+    elapsed = time.perf_counter() - t0
+    return run_id, vector, elapsed, failed
+
+
 def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int):
     """Write a single test vector to a file."""
     with open(output_path, 'w') as f:
@@ -538,6 +582,7 @@ Examples:
   %(prog)s example_sv_classes IspYuv2rgbCfg hw_field.txt 10
   %(prog)s example_sv_classes IspYuv2rgbCfg hw_field.txt 100 ./output
   %(prog)s my_constraints MyClass fields.txt 50 --seed 12345
+  %(prog)s example_sv_classes IspYuv2rgbCfg hw_field.txt 100 -j -1  # all cores
         """
     )
 
@@ -557,6 +602,8 @@ Examples:
                         help='Prefix for output files (default: config)')
     parser.add_argument('--format', choices=['txt', 'csv', 'both'], default='both',
                         help='Output format (default: both)')
+    parser.add_argument('--jobs', '-j', type=int, default=1,
+                        help='Number of parallel workers (default: 1, use -1 for all cores)')
 
     args = parser.parse_args()
 
@@ -574,9 +621,11 @@ Examples:
         random.seed(args.seed)
         try:
             import vsc
-            vsc.set_randstate(args.seed)
-        except:
-            pass
+            # vsc.set_randstate() does not exist in PyVSC.
+            # Use Python random seed; PyVSC uses its own internal RNG.
+            # Per-run seed offset provides deterministic per-run variation.
+        except ImportError:
+            print("Warning: PyVSC not imported for seed setup")
 
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -590,6 +639,7 @@ Examples:
     print(f"Output Dir   : {args.output_dir}")
     if args.seed:
         print(f"Random Seed  : {args.seed}")
+    print(f"Jobs         : {args.jobs}")
     print(f"=" * 50)
 
     # Parse field file
@@ -621,25 +671,91 @@ Examples:
         print(f"Error: Could not instantiate class: {e}")
         sys.exit(1)
 
+    # Resolve job count
+    num_jobs = args.jobs
+    if num_jobs == -1:
+        num_jobs = multiprocessing.cpu_count()
+    elif num_jobs < 1:
+        num_jobs = 1
+    num_jobs = min(num_jobs, args.num_runs)
+
+    # Validate model: try a single randomize before batch
+    print(f"\nValidating PyVSC model (single randomize)...")
+    t_val = time.perf_counter()
+    try:
+        obj.randomize()
+        val_time = time.perf_counter() - t_val
+        print(f"  Validation OK ({val_time:.3f}s per randomize)")
+        est_serial = val_time * args.num_runs
+        print(f"  Estimated serial time for {args.num_runs} runs: {est_serial:.1f}s")
+        if num_jobs > 1:
+            print(f"  Using {num_jobs} parallel workers (est: {est_serial/num_jobs:.1f}s)")
+    except Exception as e:
+        print(f"  WARNING: Validation randomize failed: {e}")
+        print(f"  Proceeding anyway — some runs may fail.")
+
     # Generate test vectors
-    print(f"\nGenerating {args.num_runs} test vectors...")
-    vectors = []
+    print(f"\nGenerating {args.num_runs} test vectors (jobs={num_jobs})...")
+    gen_start = time.perf_counter()
+    vectors = [None] * args.num_runs
     successful = 0
+    total_solve_time = 0.0
 
-    for run_id in range(args.num_runs):
-        vector = generate_test_vector(obj, fields, run_id, field_stats)
-        vectors.append(vector)
+    if num_jobs > 1:
+        # Parallel execution: each worker creates its own instance
+        worker_args = [
+            (args.pyvsc_module, args.class_name, fields, run_id, args.seed)
+            for run_id in range(args.num_runs)
+        ]
+        with multiprocessing.Pool(processes=num_jobs) as pool:
+            for run_id, vector, elapsed, failed in pool.imap_unordered(
+                    _randomize_worker, worker_args):
+                vectors[run_id] = vector
+                total_solve_time += elapsed
+                if not failed:
+                    successful += 1
 
-        # Write individual file
+                # Collect stats
+                for field_name, _ in fields:
+                    if field_name in field_stats:
+                        field_stats[field_name].values.append(
+                            vector.get(field_name, ''))
+
+                # Progress
+                done = sum(1 for v in vectors if v is not None)
+                if done % max(1, args.num_runs // 10) == 0 or done == args.num_runs:
+                    print(f"  Generated {done}/{args.num_runs} vectors")
+
+        # Write individual files after collection (parallel writes cause I/O contention)
         if args.format in ['txt', 'both']:
-            output_path = os.path.join(args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
-            write_test_vector_file(vector, output_path, run_id)
+            for run_id, vector in enumerate(vectors):
+                output_path = os.path.join(
+                    args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
+                write_test_vector_file(vector, output_path, run_id)
+    else:
+        # Serial execution: reuse single instance (no state accumulation issue)
+        for run_id in range(args.num_runs):
+            t_iter = time.perf_counter()
+            vector = generate_test_vector(obj, fields, run_id, field_stats)
+            elapsed = time.perf_counter() - t_iter
+            total_solve_time += elapsed
+            vectors[run_id] = vector
 
-        successful += 1
+            # Write individual file
+            if args.format in ['txt', 'both']:
+                output_path = os.path.join(
+                    args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
+                write_test_vector_file(vector, output_path, run_id)
 
-        # Progress indicator
-        if (run_id + 1) % 10 == 0 or run_id == args.num_runs - 1:
-            print(f"  Generated {run_id + 1}/{args.num_runs} vectors")
+            successful += 1
+
+            # Progress with timing
+            if (run_id + 1) % max(1, args.num_runs // 10) == 0 \
+                    or run_id == args.num_runs - 1:
+                print(f"  Generated {run_id + 1}/{args.num_runs} vectors "
+                      f"({elapsed:.3f}s this iter)")
+
+    gen_elapsed = time.perf_counter() - gen_start
 
     # Compute final statistics
     for stats in field_stats.values():
@@ -652,7 +768,10 @@ Examples:
 
     print(f"\nGeneration complete!")
     print(f"  Successful: {successful}/{args.num_runs}")
-    print(f"  Output files in: {args.output_dir}")
+    print(f"  Wall time : {gen_elapsed:.2f}s")
+    print(f"  Solve time: {total_solve_time:.2f}s "
+          f"(avg {total_solve_time/max(1,args.num_runs):.3f}s/run)")
+    print(f"  Output dir: {args.output_dir}")
 
     # Show sample statistics
     print(f"\n{'='*100}")
@@ -684,4 +803,5 @@ Examples:
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()  # Required for Windows
     main()
