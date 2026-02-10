@@ -602,7 +602,7 @@ Examples:
                         help='Prefix for output files (default: config)')
     parser.add_argument('--format', choices=['txt', 'csv', 'both'], default='both',
                         help='Output format (default: both)')
-    parser.add_argument('--jobs', '-j', type=int, default=1,
+    parser.add_argument('--jobs', '-j', type=int, default=-1,
                         help='Number of parallel workers (default: 1, use -1 for all cores)')
 
     args = parser.parse_args()
