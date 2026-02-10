@@ -9,14 +9,17 @@ persistence — no external dependencies beyond the Python stdlib.
 Pipeline steps:
   0  XML -> SV conversion        (local, only for .xml input)
   1  SV  -> PyVSC translation    (local)
-  2  PyVSC randomization test    (WSL)
-  3  Test-vector generation      (WSL)
+  2  PyVSC randomization test    (WSL on Windows, direct on Linux)
+  3  Test-vector generation      (WSL on Windows, direct on Linux)
+
+Supports both Windows (via WSL) and native Linux execution.
+On Linux, PyVSC is expected to be installed system-wide (no venv).
 
 Usage examples:
-    python sv_to_pyvsc_console.py example_sv_classes.sv
-    python sv_to_pyvsc_console.py isp_yuv2rgb.sv --hw-field hw_field.txt --num-vectors 10
-    python sv_to_pyvsc_console.py --step 1 2
-    python sv_to_pyvsc_console.py example_sv_classes.sv -v --step all
+    python3 sv_to_pyvsc_console.py example_sv_classes.sv
+    python3 sv_to_pyvsc_console.py isp_yuv2rgb.sv --hw-field hw_field.txt --num-vectors 10
+    python3 sv_to_pyvsc_console.py --step 1 2
+    python3 sv_to_pyvsc_console.py example_sv_classes.sv -v --step all
 """
 
 from __future__ import annotations
@@ -38,7 +41,10 @@ from typing import Dict, List, Optional, Tuple
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
+
+# Use python3 on Linux, python on Windows
+_PYTHON = "python3" if sys.platform != "win32" else "python"
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_FILE = os.path.join(_SCRIPT_DIR, "console_config.json")
@@ -270,8 +276,10 @@ class ConsoleRunner:
         self.output_dir: str = (
             args.output_dir or saved.get("output_dir", "./test_vectors")
         )
+        # Default: WSL on Windows, direct execution on Linux
+        default_wsl = sys.platform == "win32"
         self.use_wsl: bool = (
-            args.use_wsl if args.use_wsl is not None else saved.get("use_wsl", True)
+            args.use_wsl if args.use_wsl is not None else saved.get("use_wsl", default_wsl)
         )
 
         # Resolve relative paths to absolute (critical for WSL commands
@@ -437,11 +445,14 @@ class ConsoleRunner:
         self._log(f"  Num vectors  : {self.num_vectors}")
         self._log(f"  Random seed  : {self.random_seed}")
         self._log(f"  Output dir   : {self.output_dir}")
+        self._log(f"  Platform     : {sys.platform}")
         self._log(f"  Use WSL      : {self.use_wsl}")
         if self.use_wsl:
             self._log(f"  WSL distro   : {self.env_config.get('WSL_DISTRO', 'N/A')}")
             self._log(f"  WSL project  : {self.env_config.get('WSL_PROJECT_PATH', 'N/A')}")
             self._log(f"  WSL venv     : {self.env_config.get('WSL_VENV_PATH', 'N/A')}")
+        else:
+            self._log(f"  Python       : {_PYTHON} (native, no venv)")
         self._log(f"  Steps        : {self.steps}")
         self._log("")
 
@@ -596,7 +607,7 @@ class ConsoleRunner:
             result.error_msg = "Converter script missing"
             return result
 
-        cmd = f'python "{converter}" "{self.input_file_path}" "{self.sv_file_path}"'
+        cmd = f'{_PYTHON} "{converter}" "{self.input_file_path}" "{self.sv_file_path}"'
 
         self._print_step_header(0, STEP_NAMES[0])
         success, elapsed = self._run_command(cmd, STEP_NAMES[0], use_wsl=False)
@@ -621,7 +632,7 @@ class ConsoleRunner:
             return result
 
         translator = os.path.join(self.project_root, "sv_to_pyvsc.py")
-        cmd = f'python "{translator}" "{self.sv_file_path}" -o "{self.output_py_path}"'
+        cmd = f'{_PYTHON} "{translator}" "{self.sv_file_path}" -o "{self.output_py_path}"'
 
         self._print_step_header(1, STEP_NAMES[1])
         success, elapsed = self._run_command(cmd, STEP_NAMES[1], use_wsl=False)
@@ -645,12 +656,20 @@ class ConsoleRunner:
             result.error_msg = "PyVSC file missing"
             return result
 
-        wsl_output_dir = self._to_wsl_path(self.output_base_dir)
         py_filename = os.path.basename(self.output_py_path)
-        cmd = f"cd {wsl_output_dir} && python {py_filename}"
+
+        if self.use_wsl:
+            wsl_output_dir = self._to_wsl_path(self.output_base_dir)
+            cmd = f"cd {wsl_output_dir} && python {py_filename}"
+        else:
+            cmd = f'{_PYTHON} "{py_filename}"'
 
         self._print_step_header(2, STEP_NAMES[2])
-        success, elapsed = self._run_command(cmd, STEP_NAMES[2], use_wsl=True)
+        success, elapsed = self._run_command(
+            cmd, STEP_NAMES[2],
+            use_wsl=self.use_wsl,
+            cwd=self.output_base_dir if not self.use_wsl else None,
+        )
         result.success = success
         result.elapsed_secs = elapsed
         self._print_step_footer(2, success, elapsed)
@@ -677,23 +696,38 @@ class ConsoleRunner:
             return result
 
         module_name = os.path.splitext(os.path.basename(self.output_py_path))[0]
-        wsl_hw_path = self._to_wsl_path(self.hw_field_path)
-        wsl_output_dir = self._to_wsl_path(self.output_base_dir)
-        wsl_project_root = self._to_wsl_path(self.project_root)
+        generator = os.path.join(self.project_root, "generate_test_vectors.py")
 
-        wsl_output_arg = self.output_dir
-        if self.output_dir and len(self.output_dir) >= 2 and self.output_dir[1] == ":":
-            wsl_output_arg = self._to_wsl_path(self.output_dir)
+        if self.use_wsl:
+            wsl_hw_path = self._to_wsl_path(self.hw_field_path)
+            wsl_output_dir = self._to_wsl_path(self.output_base_dir)
+            wsl_project_root = self._to_wsl_path(self.project_root)
 
-        cmd = (
-            f"cd {wsl_output_dir} && "
-            f"python {wsl_project_root}/generate_test_vectors.py "
-            f"{module_name} {self.class_name} {wsl_hw_path} "
-            f"{self.num_vectors} {wsl_output_arg} --seed {self.random_seed}"
-        )
+            wsl_output_arg = self.output_dir
+            if self.output_dir and len(self.output_dir) >= 2 and self.output_dir[1] == ":":
+                wsl_output_arg = self._to_wsl_path(self.output_dir)
+
+            cmd = (
+                f"cd {wsl_output_dir} && "
+                f"python {wsl_project_root}/generate_test_vectors.py "
+                f"{module_name} {self.class_name} {wsl_hw_path} "
+                f"{self.num_vectors} {wsl_output_arg} --seed {self.random_seed}"
+            )
+        else:
+            # Native Linux: run directly from the Output directory
+            cmd = (
+                f'{_PYTHON} "{generator}" '
+                f"{module_name} {self.class_name} "
+                f'"{self.hw_field_path}" '
+                f"{self.num_vectors} {self.output_dir} --seed {self.random_seed}"
+            )
 
         self._print_step_header(3, STEP_NAMES[3])
-        success, elapsed = self._run_command(cmd, STEP_NAMES[3], use_wsl=True)
+        success, elapsed = self._run_command(
+            cmd, STEP_NAMES[3],
+            use_wsl=self.use_wsl,
+            cwd=self.output_base_dir if not self.use_wsl else None,
+        )
         result.success = success
         result.elapsed_secs = elapsed
         self._print_step_footer(3, success, elapsed)
