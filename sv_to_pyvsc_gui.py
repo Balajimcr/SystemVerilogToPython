@@ -25,8 +25,14 @@ import subprocess
 import threading
 import queue
 import re
+import json
 from datetime import datetime
 from pathlib import Path
+
+# Config file lives next to this script
+_CONFIG_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "gui_config.json"
+)
 
 
 class SVtoPyVSCGUI:
@@ -48,8 +54,8 @@ class SVtoPyVSCGUI:
 
         # Variables
         self.input_file_path = tk.StringVar()       # Can be .sv or .xml
-        self.sv_file_path = tk.StringVar()           # Resolved .sv path (after XML conversion)
-        self.output_py_path = tk.StringVar()         # Always in Output/ directory
+        self.sv_file_path = tk.StringVar()           # Internal: resolved .sv path
+        self.output_py_path = tk.StringVar()         # Internal: Output/<name>.py
         self.hw_field_path = tk.StringVar()
         self.class_name = tk.StringVar(value="")
         self.num_vectors = tk.IntVar(value=10)
@@ -69,8 +75,80 @@ class SVtoPyVSCGUI:
         # Start log queue processor
         self._process_log_queue()
 
-        # Set default paths
-        self._set_default_paths()
+        # Load saved config (overrides defaults), then fall back to defaults
+        if not self._load_gui_config():
+            self._set_default_paths()
+
+        # Save config on window close
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # =========================================================================
+    # JSON Config Persistence
+    # =========================================================================
+
+    def _save_gui_config(self):
+        """Save current GUI settings to gui_config.json."""
+        config = {
+            'input_file_path': self.input_file_path.get(),
+            'hw_field_path': self.hw_field_path.get(),
+            'class_name': self.class_name.get(),
+            'num_vectors': self.num_vectors.get(),
+            'random_seed': self.random_seed.get(),
+            'output_dir': self.output_dir.get(),
+            'use_wsl': self.use_wsl.get(),
+        }
+        try:
+            with open(_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2)
+        except Exception as e:
+            print(f"[WARNING] Could not save GUI config: {e}")
+
+    def _load_gui_config(self):
+        """Load GUI settings from gui_config.json.
+
+        Returns True if config was loaded successfully, False otherwise.
+        """
+        if not os.path.exists(_CONFIG_FILE):
+            return False
+
+        try:
+            with open(_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # Restore values only if the saved file still exists
+            input_path = config.get('input_file_path', '')
+            if input_path and os.path.exists(input_path):
+                self.input_file_path.set(input_path)
+                self._resolve_input_file(input_path, log=False)
+            else:
+                # Saved file gone — fall back to defaults
+                self._set_default_paths()
+
+            hw_path = config.get('hw_field_path', '')
+            if hw_path and os.path.exists(hw_path):
+                self.hw_field_path.set(hw_path)
+
+            self.class_name.set(config.get('class_name', ''))
+            self.num_vectors.set(config.get('num_vectors', 10))
+            self.random_seed.set(config.get('random_seed', 12345))
+            self.output_dir.set(config.get('output_dir', './test_vectors'))
+            self.use_wsl.set(config.get('use_wsl', True))
+
+            self._log("Loaded previous session settings from gui_config.json", 'info')
+            return True
+
+        except Exception as e:
+            print(f"[WARNING] Could not load GUI config: {e}")
+            return False
+
+    def _on_close(self):
+        """Save config and close the application."""
+        self._save_gui_config()
+        self.root.destroy()
+
+    # =========================================================================
+    # Env.csh
+    # =========================================================================
 
     def _load_env_config(self):
         """
@@ -139,13 +217,7 @@ class SVtoPyVSCGUI:
 
         if os.path.exists(default_sv):
             self.input_file_path.set(default_sv)
-            self.sv_file_path.set(default_sv)
-            self.input_type.set("SV")
-            # Output .py goes to Output/ directory
-            base_name = os.path.splitext(os.path.basename(default_sv))[0]
-            self.output_py_path.set(
-                os.path.join(self._get_output_dir(), base_name + ".py")
-            )
+            self._resolve_input_file(default_sv, log=False)
 
         if os.path.exists(default_hw):
             self.hw_field_path.set(default_hw)
@@ -163,7 +235,7 @@ class SVtoPyVSCGUI:
         file_menu.add_separator()
         file_menu.add_command(label="Open Output Folder", command=self._open_output_folder)
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
+        file_menu.add_command(label="Exit", command=self._on_close)
 
         # Actions menu
         actions_menu = tk.Menu(menubar, tearoff=0)
@@ -198,6 +270,20 @@ class SVtoPyVSCGUI:
 
         self._create_log_panel(right_frame)
 
+    @staticmethod
+    def _make_right_aligned_entry(parent, textvariable, width=40, **grid_kw):
+        """Create an Entry widget whose cursor sits at the right end so
+        the *filename* (not the leading path) is always visible."""
+        entry = ttk.Entry(parent, textvariable=textvariable, width=width)
+        entry.grid(**grid_kw)
+        # Move cursor to the end whenever the value changes
+        def _scroll_right(*_args):
+            entry.xview_moveto(1.0)
+        textvariable.trace_add('write', _scroll_right)
+        # Also scroll right once now (for the initial value)
+        entry.after_idle(lambda: entry.xview_moveto(1.0))
+        return entry
+
     def _create_config_panel(self, parent):
         """Create configuration panel."""
         row = 0
@@ -217,38 +303,18 @@ class SVtoPyVSCGUI:
         self.input_type_label.pack(side=tk.LEFT, padx=(10, 0))
         row += 1
 
-        input_entry = ttk.Entry(parent, textvariable=self.input_file_path, width=40)
-        input_entry.grid(row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
-        ttk.Button(parent, text="Browse...", command=self._browse_input_file).grid(
-            row=row, column=2, padx=(5, 0), pady=2)
-        row += 1
-
-        # SV File (resolved path - shown when XML is selected)
-        self.sv_path_label = ttk.Label(parent, text="Resolved SV File:")
-        self.sv_path_label.grid(row=row, column=0, sticky=tk.W, pady=2)
-        row += 1
-        self.sv_path_entry = ttk.Entry(parent, textvariable=self.sv_file_path, width=40,
-                                        state='readonly')
-        self.sv_path_entry.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=2)
-        row += 1
-
-        # Output Python File (in Output/ directory)
-        output_label_frame = ttk.Frame(parent)
-        output_label_frame.grid(row=row, column=0, columnspan=3, sticky=tk.W, pady=2)
-        ttk.Label(output_label_frame, text="Output PyVSC File:").pack(side=tk.LEFT)
-        ttk.Label(output_label_frame, text="(Output/)",
-                  foreground='#4ec9b0', font=('Helvetica', 8)).pack(side=tk.LEFT, padx=(5, 0))
-        row += 1
-        ttk.Entry(parent, textvariable=self.output_py_path, width=40).grid(
+        self._make_right_aligned_entry(
+            parent, self.input_file_path,
             row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
-        ttk.Button(parent, text="Browse...", command=self._browse_output_py).grid(
+        ttk.Button(parent, text="Browse...", command=self._browse_input_file).grid(
             row=row, column=2, padx=(5, 0), pady=2)
         row += 1
 
         # HW Field File
         ttk.Label(parent, text="HW Field File:").grid(row=row, column=0, sticky=tk.W, pady=2)
         row += 1
-        ttk.Entry(parent, textvariable=self.hw_field_path, width=40).grid(
+        self._make_right_aligned_entry(
+            parent, self.hw_field_path,
             row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
         ttk.Button(parent, text="Browse...", command=self._browse_hw_field).grid(
             row=row, column=2, padx=(5, 0), pady=2)
@@ -288,7 +354,8 @@ class SVtoPyVSCGUI:
         # Output Directory
         ttk.Label(parent, text="Output Directory:").grid(row=row, column=0, sticky=tk.W, pady=2)
         row += 1
-        ttk.Entry(parent, textvariable=self.output_dir, width=40).grid(
+        self._make_right_aligned_entry(
+            parent, self.output_dir,
             row=row, column=0, columnspan=2, sticky=tk.EW, pady=2)
         ttk.Button(parent, text="Browse...", command=self._browse_output_dir).grid(
             row=row, column=2, padx=(5, 0), pady=2)
@@ -416,9 +483,9 @@ class SVtoPyVSCGUI:
             self.input_file_path.set(filename)
             self._resolve_input_file(filename)
 
-    def _resolve_input_file(self, filepath):
+    def _resolve_input_file(self, filepath, log=True):
         """
-        Determine input type and set resolved paths accordingly.
+        Determine input type and set internal resolved paths accordingly.
 
         If .xml: SV path = Output/<name>.sv, PyVSC path = Output/<name>.py
         If .sv:  SV path = filepath,         PyVSC path = Output/<name>.py
@@ -429,46 +496,38 @@ class SVtoPyVSCGUI:
 
         if ext == '.xml':
             self.input_type.set("XML")
-            # XML -> SV conversion will place .sv in Output/
             sv_path = os.path.join(output_dir, base_name + ".sv")
             self.sv_file_path.set(sv_path)
             self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
-            self._log(f"XML file selected: {os.path.basename(filepath)}", 'info')
-            self._log(f"  SV output will be: {sv_path}", 'info')
-            self._log(f"  PyVSC output will be: {os.path.join(output_dir, base_name + '.py')}", 'info')
+            if log:
+                self._log(f"XML file selected: {os.path.basename(filepath)}", 'info')
+                self._log(f"  SV output -> Output/{base_name}.sv", 'info')
+                self._log(f"  PyVSC output -> Output/{base_name}.py", 'info')
         elif ext == '.sv':
             self.input_type.set("SV")
             self.sv_file_path.set(filepath)
             self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
-            self._log(f"SV file selected: {os.path.basename(filepath)}", 'info')
-            self._log(f"  PyVSC output will be: {os.path.join(output_dir, base_name + '.py')}", 'info')
+            if log:
+                self._log(f"SV file selected: {os.path.basename(filepath)}", 'info')
+                self._log(f"  PyVSC output -> Output/{base_name}.py", 'info')
         else:
             self.input_type.set("N/A")
             self.sv_file_path.set(filepath)
             self.output_py_path.set(os.path.join(output_dir, base_name + ".py"))
-            self._log(f"Unknown file type: {ext}. Treating as SV.", 'warning')
+            if log:
+                self._log(f"Unknown file type: {ext}. Treating as SV.", 'warning')
 
         self._detect_class_name()
 
-    def _browse_output_py(self):
-        """Browse for output Python file (defaults to Output/ directory)."""
-        filename = filedialog.asksaveasfilename(
-            title="Save Python File As",
-            initialdir=self._get_output_dir(),
-            defaultextension=".py",
-            filetypes=[("Python files", "*.py"), ("All files", "*.*")]
-        )
-        if filename:
-            self.output_py_path.set(filename)
-
     def _browse_hw_field(self):
-        """Browse for HW field file."""
+        """Browse for HW field file and validate against SV fields."""
         filename = filedialog.askopenfilename(
             title="Select HW Field File",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         if filename:
             self.hw_field_path.set(filename)
+            self._validate_hw_fields(filename)
 
     def _browse_output_dir(self):
         """Browse for output directory."""
@@ -490,6 +549,88 @@ class SVtoPyVSCGUI:
             self._log(f"Could not open output folder: {e}", 'warning')
 
     # =========================================================================
+    # HW Field Validation
+    # =========================================================================
+
+    def _validate_hw_fields(self, hw_path):
+        """Validate hw_field.txt entries against fields in the selected SV file.
+
+        Parses field names from hw_field.txt, extracts 'rand ... <name>;'
+        declarations from the SV source, and warns about any hw_field
+        entries that have no matching SV field.
+        """
+        sv_path = self.sv_file_path.get()
+        if not sv_path or not os.path.exists(sv_path):
+            self._log("SV file not available yet; skipping HW field validation.", 'info')
+            return
+
+        # Parse field names from hw_field.txt (first token on non-comment lines)
+        hw_fields = set()
+        try:
+            with open(hw_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    # Remove inline comments, take first whitespace-separated token
+                    token = line.split('#')[0].split()[0]
+                    hw_fields.add(token)
+        except Exception as e:
+            self._log(f"Could not read HW field file: {e}", 'error')
+            return
+
+        if not hw_fields:
+            messagebox.showwarning(
+                "HW Field Validation",
+                "The HW field file is empty or contains no field entries.\n\n"
+                "Please check the file format:\n"
+                "  field_name default_value"
+            )
+            return
+
+        # Parse field names from SV file (rand/randc declarations)
+        sv_fields = set()
+        try:
+            with open(sv_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # Match:  rand <type> [qualifiers] <name> ;
+            #  e.g.   rand bit [7:0] my_field;
+            #         rand int unsigned width;
+            #         rand int signed c00;
+            for m in re.finditer(
+                r'\b(?:rand|randc)\s+(?:bit|logic|int|byte|shortint|longint|integer)\b'
+                r'[^;]*?(\w+)\s*;', content
+            ):
+                sv_fields.add(m.group(1))
+            # Also match rand enum fields: rand <enum_type> <name>;
+            for m in re.finditer(r'\brand\s+\w+\s+(\w+)\s*;', content):
+                sv_fields.add(m.group(1))
+        except Exception as e:
+            self._log(f"Could not parse SV file for field names: {e}", 'error')
+            return
+
+        # Compare
+        missing = hw_fields - sv_fields
+        if missing:
+            missing_list = ', '.join(sorted(missing))
+            self._log(
+                f"HW field validation: {len(missing)} field(s) not found in SV: {missing_list}",
+                'warning'
+            )
+            messagebox.showwarning(
+                "HW Field Validation",
+                f"{len(missing)} field(s) in hw_field.txt are NOT present "
+                f"in the selected SV file:\n\n"
+                f"{missing_list}\n\n"
+                f"Please check hw_field.txt for typos or stale entries."
+            )
+        else:
+            self._log(
+                f"HW field validation: all {len(hw_fields)} field(s) found in SV.",
+                'success'
+            )
+
+    # =========================================================================
     # Class Name Detection
     # =========================================================================
 
@@ -498,7 +639,6 @@ class SVtoPyVSCGUI:
         sv_path = self.sv_file_path.get()
         if not sv_path or not os.path.exists(sv_path):
             # For XML files, the SV file may not exist yet
-            # Try to detect from the XML or input file directly
             input_path = self.input_file_path.get()
             if input_path and os.path.exists(input_path) and input_path.lower().endswith('.xml'):
                 self._log("SV file not generated yet. Class name will be detected after XML\u2192SV conversion.", 'info')
@@ -567,7 +707,13 @@ class SVtoPyVSCGUI:
     # =========================================================================
 
     def _run_command(self, cmd, description, use_wsl=False, cwd=None):
-        """Run a command and capture output."""
+        """Run a command and capture output.
+
+        Uses PYTHONUNBUFFERED=1 and bufsize=1 to prevent the massive
+        slowdown caused by Python's default full-buffering when stdout
+        is redirected to a pipe.  A dedicated reader thread streams
+        output to the log without blocking the caller.
+        """
         self._log(f"{'='*50}", 'header')
         self._log(f"{description}", 'header')
         self._log(f"{'='*50}", 'header')
@@ -594,6 +740,7 @@ class SVtoPyVSCGUI:
             cwd = self.project_root
 
         try:
+            # Force unbuffered stdout in child Python processes.
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
@@ -743,7 +890,6 @@ class SVtoPyVSCGUI:
     def _run_translation(self):
         """Run SV to PyVSC translation."""
         sv_path = self.sv_file_path.get()
-        py_path = self.output_py_path.get()
 
         if not sv_path or not os.path.exists(sv_path):
             messagebox.showerror("Error",
@@ -997,7 +1143,7 @@ class SVtoPyVSCGUI:
         messagebox.showinfo(
             "About",
             "SV / XML to PyVSC Translation Tool\n\n"
-            "Version: 2.0\n\n"
+            "Version: 2.1\n\n"
             "This tool converts SystemVerilog or XML constraint models to PyVSC "
             "Python code and generates randomized test vectors.\n\n"
             "Pipeline:\n"
@@ -1007,7 +1153,8 @@ class SVtoPyVSCGUI:
             "- SV to PyVSC translation\n"
             "- PyVSC randomization testing\n"
             "- Bulk test vector generation\n"
-            f"- All output in: Output/\n\n"
+            f"- All output in: Output/\n"
+            "- Session settings saved automatically\n\n"
             "Developed for Samsung Hardware Verification"
         )
 

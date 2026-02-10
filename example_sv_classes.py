@@ -197,15 +197,6 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_color_matrix(self):
-    vsc.solve_order(self.color_space, self.c00)
-    vsc.solve_order(self.color_space, self.c01)
-    vsc.solve_order(self.color_space, self.c02)
-    vsc.solve_order(self.color_space, self.c10)
-    vsc.solve_order(self.color_space, self.c11)
-    vsc.solve_order(self.color_space, self.c12)
-    vsc.solve_order(self.color_space, self.c20)
-    vsc.solve_order(self.color_space, self.c21)
-    vsc.solve_order(self.color_space, self.c22)
     with vsc.if_then(self.color_space == ColorSpace.CS_BT601):
       self.c00==298
       self.c01==0
@@ -239,10 +230,6 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_offsets(self):
-    vsc.solve_order(self.range_mode, self.y_offset)
-    vsc.solve_order(self.range_mode, self.uv_offset)
-    vsc.solve_order(self.yuv_bit_depth, self.y_offset)
-    vsc.solve_order(self.yuv_bit_depth, self.uv_offset)
     with vsc.if_then(self.range_mode == RangeMode.FULL_RANGE):
       self.y_offset  == 0
       self.uv_offset == (vsc.unsigned(1) << (self.yuv_bit_depth-1))
@@ -444,10 +431,6 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_nested_arithmetic(self):
-    vsc.solve_order(self.IsBypassMode, self.yuv_isp_image_crop_pre_x)
-    vsc.solve_order(self.yuv_isp_crop_width, self.yuv_isp_image_crop_pre_x)
-    vsc.solve_order(self.yuv_isp_image_active_width, self.yuv_isp_image_crop_pre_x)
-    vsc.solve_order(self.yuv_isp_out_scale_x, self.yuv_isp_image_crop_pre_x)
     with vsc.if_then((self.IsBypassMode != 0)):
       self.yuv_isp_image_crop_pre_x == 0
     with vsc.else_then:
@@ -459,9 +442,6 @@ class IspYuv2rgbCfg:
 
   @vsc.constraint
   def cr_literal_times_expr(self):
-    vsc.solve_order(self.yuv_isp_org_height, self.yuv_isp_scale_y)
-    vsc.solve_order(self.yuv_isp_image_active_height, self.yuv_isp_scale_y)
-    vsc.solve_order(self.yuv_isp_scale_shifter_y, self.yuv_isp_scale_y)
     with vsc.if_then(self.IsGridMode == 0):
       self.yuv_isp_scale_y == ((vsc.unsigned(3) * (vsc.unsigned(1) <<(vsc.unsigned(20) + self.yuv_isp_scale_shifter_y))+self.yuv_isp_org_height//2)//self.yuv_isp_org_height)
     with vsc.else_then:

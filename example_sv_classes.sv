@@ -214,16 +214,6 @@ class isp_yuv2rgb_cfg;
             c10==298; c11==-57; c12==-157;
             c20==298; c21==565; c22==0;
         }
-
-        solve color_space before c00;
-        solve color_space before c01;
-        solve color_space before c02;
-        solve color_space before c10;
-        solve color_space before c11;
-        solve color_space before c12;
-        solve color_space before c20;
-        solve color_space before c21;
-        solve color_space before c22;
     }
 
     // ========================================================================
@@ -239,11 +229,6 @@ class isp_yuv2rgb_cfg;
             y_offset  == (16  << (yuv_bit_depth-8));
             uv_offset == (128 << (yuv_bit_depth-8));
         }
-
-        solve range_mode before y_offset;
-        solve range_mode before uv_offset;
-        solve yuv_bit_depth before y_offset;
-        solve yuv_bit_depth before uv_offset;
     }
 
     // ========================================================================
@@ -499,10 +484,6 @@ class isp_yuv2rgb_cfg;
             }
             yuv_isp_image_crop_pre_x <= 16384 - yuv_isp_image_active_width;
         }
-        solve IsBypassMode before yuv_isp_image_crop_pre_x;
-        solve yuv_isp_crop_width before yuv_isp_image_crop_pre_x;
-        solve yuv_isp_image_active_width before yuv_isp_image_crop_pre_x;
-        solve yuv_isp_out_scale_x before yuv_isp_image_crop_pre_x;
     }
 
     // ========================================================================
@@ -520,9 +501,6 @@ class isp_yuv2rgb_cfg;
         } else {
             yuv_isp_scale_y == ((3*(1<<(20+yuv_isp_scale_shifter_y))+yuv_isp_image_active_height/2)/yuv_isp_image_active_height);
         }
-        solve yuv_isp_org_height before yuv_isp_scale_y;
-        solve yuv_isp_image_active_height before yuv_isp_scale_y;
-        solve yuv_isp_scale_shifter_y before yuv_isp_scale_y;
     }
 
     constraint cr_literal_times_paren {

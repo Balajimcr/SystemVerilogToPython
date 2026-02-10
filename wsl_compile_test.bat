@@ -80,20 +80,20 @@ echo.
 echo ============================================
 echo Step 1: Translating SystemVerilog to PyVSC
 echo ============================================
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python sv_to_pyvsc.py example_sv_classes.sv -o example_sv_classes.py"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python sv_to_pyvsc.py isp_yuv2rgb.sv -o isp_yuv2rgb.py"
 
 echo.
 echo ============================================
 echo Step 2: Testing PyVSC randomization
 echo ============================================
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python example_sv_classes.py"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python isp_yuv2rgb.py"
 
 echo.
 echo ============================================
 echo Step 3: Generating 10 test vectors
 echo ============================================
 :: Use full HW field path so WSL can find it regardless of cwd
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py example_sv_classes IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py isp_yuv2rgb IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345"
 
 echo.
 echo ============================================
