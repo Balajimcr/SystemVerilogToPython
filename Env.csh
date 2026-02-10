@@ -18,7 +18,7 @@
 # ==============================================================================
 
 # --- Windows Script Path (where this project lives on Windows) ---
-WIN_PROJECT_PATH = C:\D\Project_Files\Samsung\SystemVerilogToPython
+WIN_PROJECT_PATH = c:\D\Project_Files\Samsung\SystemVerilogToPython
 
 # --- WSL Project Path (same directory as seen from inside WSL) ---
 WSL_PROJECT_PATH = /mnt/c/D/Project_Files/Samsung/SystemVerilogToPython
