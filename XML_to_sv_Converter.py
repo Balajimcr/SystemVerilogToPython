@@ -18,178 +18,255 @@ API Usage:
     # result.output_path: str
 """
 
-import argparse
-import os
-import sys
+from __future__ import annotations
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional
+import sys
 from pathlib import Path
+from typing import List, Tuple
+
+# -----------------------------------------------------------------------------
+# Precompiled regex patterns
+# -----------------------------------------------------------------------------
+_PATTERN_MIN_VALUE = re.compile(r'<MinValue>(.*?)<\/MinValue>')
+_PATTERN_MAX_VALUE = re.compile(r'<MaxValue>(.*?)<\/MaxValue>')
+_PATTERN_PARAM_NAME = re.compile(r'<Parameter[^>]*name=["\']([^"\']+)')
+_PATTERN_FIELD_NAME = re.compile(r'<Field[^>]*name=["\']([^"\']+)')
+_PATTERN_TO_END = re.compile(r'</TestConstraint>')
+
+# -----------------------------------------------------------------------------
+# XML entity translations
+# -----------------------------------------------------------------------------
+_XML_ENTITY_MAP = {
+    "&lt;": "<",
+    "&gt;": ">",
+    "&amp;": "&",
+    "&apos;": "'",
+    "&quot;": '"',
+}
+
+# -----------------------------------------------------------------------------
+# Utility helpers
+# -----------------------------------------------------------------------------
+def decode_entities(lines: List[str]) -> List[str]:
+    translated = []
+    for line in lines:
+        for src, dst in _XML_ENTITY_MAP.items():
+            line = line.replace(src, dst)
+        translated.append(line)
+    return translated
 
 
-@dataclass
-class ConversionResult:
-    """Result of XML to SV conversion."""
-    success: bool = False
-    sv_code: str = ""
-    warnings: List[str] = field(default_factory=list)
-    output_path: str = ""
-    error_message: str = ""
+def print_progress(current: int, total: int, bar_len: int = 40) -> None:
+    if total == 0:
+        return
+    filled = int(bar_len * current / total)
+    bar = '█' * filled + '-' * (bar_len - filled)
+    perc = int(100 * current / total)
+    sys.stdout.write(f'\rParsing XML: [{bar}] {perc:3d}%')
+    sys.stdout.flush()
 
 
-class XMLtoSVConverter:
-    """
-    Converts XML register/constraint definitions to SystemVerilog.
+# -----------------------------------------------------------------------------
+# XML block extraction helpers
+# -----------------------------------------------------------------------------
+def extract_name_from_block(block: List[str], is_field: bool) -> str | None:
+    first_line = block[0]
+    pattern = _PATTERN_FIELD_NAME if is_field else _PATTERN_PARAM_NAME
+    match = pattern.search(first_line)
+    if not match:
+        return None
 
-    This is a PLACEHOLDER implementation. The actual converter should:
-    1. Parse XML file containing register definitions, constraints, enums, etc.
-    2. Generate valid SystemVerilog class with constraint blocks.
-    3. Return a ConversionResult with the generated SV code.
-
-    Replace this class with the actual implementation.
-    """
-
-    def __init__(self, verbose: bool = False):
-        self.verbose = verbose
-
-    def convert_file(self, xml_path: str, output_path: str = None) -> ConversionResult:
-        """
-        Convert an XML file to SystemVerilog.
-
-        Args:
-            xml_path: Path to input XML file.
-            output_path: Path to output .sv file. If None, derives from xml_path.
-
-        Returns:
-            ConversionResult with success status, generated SV code, and warnings.
-        """
-        result = ConversionResult()
-
-        # Validate input
-        if not os.path.exists(xml_path):
-            result.error_message = f"XML file not found: {xml_path}"
-            return result
-
-        if not xml_path.lower().endswith('.xml'):
-            result.warnings.append(f"Input file does not have .xml extension: {xml_path}")
-
-        # Derive output path if not specified
-        if output_path is None:
-            output_path = os.path.splitext(xml_path)[0] + '.sv'
-
-        result.output_path = output_path
-
-        try:
-            # Read XML content
-            with open(xml_path, 'r', encoding='utf-8') as f:
-                xml_content = f.read()
-
-            if self.verbose:
-                print(f"[XML2SV] Reading XML file: {xml_path}")
-                print(f"[XML2SV] XML content size: {len(xml_content)} characters")
-
-            # --- PLACEHOLDER CONVERSION ---
-            # Replace this section with actual XML parsing and SV generation
-            sv_code = self._placeholder_convert(xml_content, xml_path)
-            # --- END PLACEHOLDER ---
-
-            result.sv_code = sv_code
-            result.success = True
-
-            # Write output file
-            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(sv_code)
-
-            if self.verbose:
-                print(f"[XML2SV] Generated SV file: {output_path}")
-                print(f"[XML2SV] SV code size: {len(sv_code)} characters")
-
-            result.warnings.append(
-                "PLACEHOLDER: This is dummy SV output. "
-                "Replace XML_to_sv_Converter.py with the actual implementation."
-            )
-
-        except Exception as e:
-            result.error_message = f"Conversion failed: {str(e)}"
-            result.success = False
-
-        return result
-
-    def _placeholder_convert(self, xml_content: str, xml_path: str) -> str:
-        """
-        Placeholder conversion - generates a sample SV file.
-        Replace this with actual XML-to-SV conversion logic.
-        """
-        # Extract a class name from the XML filename
-        base_name = os.path.splitext(os.path.basename(xml_path))[0]
-        # Convert to valid SV identifier (snake_case)
-        class_name = re.sub(r'[^a-zA-Z0-9_]', '_', base_name).lower()
-        if not class_name[0].isalpha():
-            class_name = 'cfg_' + class_name
-
-        sv_code = f"""\
-// Auto-generated from XML: {os.path.basename(xml_path)}
-// PLACEHOLDER: Replace XML_to_sv_Converter.py with actual implementation
-//
-// This is a dummy SystemVerilog output for pipeline testing.
-
-typedef enum int {{
-    MODE_A = 0,
-    MODE_B = 1,
-    MODE_C = 2
-}} {class_name}_mode_e;
-
-class {class_name};
-    rand bit        enable;
-    rand bit [7:0]  data_width;
-    rand bit [7:0]  data_height;
-    rand int        mode;
-
-    constraint cr_default {{
-        enable inside {{0, 1}};
-        mode inside {{MODE_A, MODE_B, MODE_C}};
-    }}
-
-    constraint cr_dimensions {{
-        data_width inside {{[1:255]}};
-        data_height inside {{[1:255]}};
-    }}
-
-    constraint cr_mode_rules {{
-        if (mode == MODE_A) {{
-            data_width <= 128;
-        }}
-    }}
-
-endclass
-"""
-        return sv_code
+    name = match.group(1)
+    if '"' in name or "'" in name:
+        return None
+    return name
 
 
-def main():
-    """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description='Convert XML register definitions to SystemVerilog'
-    )
-    parser.add_argument('input_xml', help='Input XML file path')
-    parser.add_argument('output_sv', help='Output .sv file path')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Enable verbose output')
+def extract_value_range(block: List[str]) -> Tuple[int, int, bool]:
+    min_value = 0
+    max_value = 0
+    has_min = False
 
-    args = parser.parse_args()
+    for stmt in block:
+        if "<MinValue>" in stmt:
+            m = _PATTERN_MIN_VALUE.search(stmt)
+            if m:
+                min_value = int(m.group(1))
+                has_min = True
 
-    converter = XMLtoSVConverter(verbose=args.verbose)
-    result = converter.convert_file(args.input_xml, args.output_sv)
+        if "<MaxValue>" in stmt:
+            m = _PATTERN_MAX_VALUE.search(stmt)
+            if m:
+                max_value = int(m.group(1))
 
-    if result.success:
-        print(f"Conversion successful: {result.output_path}")
-        for w in result.warnings:
-            print(f"  WARNING: {w}")
+    return min_value, max_value, has_min
+
+
+def extract_test_constraints(block: List[str]) -> List[str]:
+    out: List[str] = []
+    i = 0
+
+    while i < len(block):
+        line = block[i]
+        if "<TestConstraint>" not in line:
+            i += 1
+            continue
+
+        end_idx = -1
+        for j in range(i, len(block)):
+            if _PATTERN_TO_END.search(block[j]):
+                end_idx = j
+                break
+
+        if end_idx == -1:
+            i += 1
+            continue
+
+        if i == end_idx:
+            m = re.search(r'<TestConstraint>(.*?)</TestConstraint>', line)
+            if m:
+                out.append(f"    {m.group(1)};\n")
+        else:
+            first = line.replace("<TestConstraint>", "").strip()
+            out.append(f"    {first}\n")
+            for k in range(i + 1, end_idx):
+                out.append(f"    {block[k].strip()}\n")
+            last = block[end_idx].replace("</TestConstraint>", "").strip()
+            if last:
+                out.append(f"    {last}\n")
+
+        i = end_idx + 1
+
+    return out
+
+
+# -----------------------------------------------------------------------------
+# Block processing
+# -----------------------------------------------------------------------------
+def process_block(
+    block: List[str],
+    idx: int,
+    is_field: bool,
+) -> Tuple[List[str], List[str]]:
+
+    name = extract_name_from_block(block, is_field)
+    if name is None:
+        return [], []
+
+    min_v, max_v, has_range = extract_value_range(block)
+    tc_body = extract_test_constraints(block)
+
+    tc_body = [l.replace('$', name) for l in tc_body]
+
+    lines: List[str] = []
+    constraints: List[str] = []
+
+    # Variable declaration
+    if min_v >= 0:
+        lines.append(f"rand bit [31:0] {name};\n")
     else:
-        print(f"Conversion failed: {result.error_message}", file=sys.stderr)
-        sys.exit(1)
+        lines.append(f"rand bit signed [31:0] {name};\n")
+
+    # Range constraint
+    if has_range:
+        lines.extend([
+            f"constraint CR_VAR_RANGE_{name} {{\n",
+            f"    {name} >= {min_v};\n",
+            f"    {name} <= {max_v};\n",
+            "}\n",
+        ])
+
+    # TestConstraint
+    if tc_body:
+        constraints.append(f"constraint cr{idx} {{\n")
+        constraints.extend(tc_body)
+        constraints.append("}\n")
+
+    return lines, constraints
 
 
-if __name__ == '__main__':
-    main()
+def process_parameter_block(block: List[str], idx: int):
+    return process_block(block, idx, is_field=False)
+
+
+def process_field_block(block: List[str], idx: int):
+    return process_block(block, idx, is_field=True)
+
+
+# -----------------------------------------------------------------------------
+# Main generator
+# -----------------------------------------------------------------------------
+def generate_rand_item(xml_path: str, sv_path: str) -> None:
+    print(f"Processing: {xml_path}")
+
+    try:
+        raw = Path(xml_path).read_text(encoding="ascii", errors="ignore").splitlines()
+    except Exception as e:
+        print(f"ERROR: {e}")
+        return
+
+    xml = decode_entities(raw)
+
+    ip_name = "unknown_ip"
+    param_blocks: List[List[str]] = []
+    field_blocks: List[List[str]] = []
+
+    in_sim_param = False
+    total = len(xml)
+
+    for i, line in enumerate(xml):
+        print_progress(i + 1, total)
+        s = line.strip()
+
+        if 'FunctionMap IP' in line:
+            ip_name = line.split('"')[1].lower()
+
+        if s.startswith("<SimParameter"):
+            in_sim_param = True
+        if s.startswith("</SimParameter>"):
+            in_sim_param = False
+
+        if not in_sim_param and _PATTERN_PARAM_NAME.search(line):
+            end = next(j for j in range(i, len(xml)) if "</Parameter>" in xml[j])
+            param_blocks.append(xml[i:end + 1])
+
+        if _PATTERN_FIELD_NAME.search(line):
+            end = next(j for j in range(i, len(xml)) if "</Field>" in xml[j])
+            field_blocks.append(xml[i:end + 1])
+
+    print("\nGenerating SystemVerilog...")
+
+    with open(sv_path, "w", encoding="ascii", errors="ignore") as f:
+        f.write(f"// Auto-generated from XML for {ip_name}\n")
+        f.write(f"class {ip_name}_rand_item extends uvm_sequence_item;\n\n")
+
+        idx = 0
+        for blk in param_blocks:
+            lines, cons = process_parameter_block(blk, idx)
+            for l in lines:
+                f.write(f"    {l}")
+            for c in cons:
+                f.write(f"    {c}")
+            idx += 1
+
+        for blk in field_blocks:
+            lines, cons = process_field_block(blk, idx)
+            for l in lines:
+                f.write(f"    {l}")
+            for c in cons:
+                f.write(f"    {c}")
+            idx += 1
+
+        f.write("endclass\n")
+
+    print(f"Generated: {sv_path}")
+
+
+# -----------------------------------------------------------------------------
+# CLI
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit("Usage: python XML_to_Sv_Converter.py <input.xml> <output.sv>")
+
+    generate_rand_item(sys.argv[1], sys.argv[2])
