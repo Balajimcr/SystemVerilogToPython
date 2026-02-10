@@ -124,7 +124,7 @@ class isp_yuv2rgb_cfg;
     rand int unsigned yuv_isp_crop_width;
 
     // -----------------------------------------------------------------------
-    // GDC
+    // ISP
     // -----------------------------------------------------------------------
     rand int signed yuv_isp_scale_y;
     rand int signed yuv_isp_scale_shifter_y;
@@ -240,7 +240,7 @@ class isp_yuv2rgb_cfg;
     }
 
     // =======================================================================
-    // GDC CONSISTENCY
+    // ISP CONSISTENCY
     // =======================================================================
 
     constraint isp_c {

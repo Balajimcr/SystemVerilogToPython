@@ -1,32 +1,210 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Sample XML input for testing the XML to SV conversion pipeline -->
-<!-- Replace this with actual XML register/constraint definitions -->
-<register_config name="sample_input">
-    <description>Sample configuration for pipeline testing</description>
+<FunctionMap IP="isp_yuv2rgb">
 
-    <enums>
-        <enum name="mode_e">
-            <value name="MODE_A" val="0"/>
-            <value name="MODE_B" val="1"/>
-            <value name="MODE_C" val="2"/>
-        </enum>
-    </enums>
+    <!-- ================================================================ -->
+    <!-- Core controls -->
+    <!-- ================================================================ -->
 
-    <fields>
-        <field name="enable" type="bit" width="1" rand="true"/>
-        <field name="data_width" type="bit" width="8" rand="true"/>
-        <field name="data_height" type="bit" width="8" rand="true"/>
-        <field name="mode" type="int" rand="true"/>
-    </fields>
+    <Parameter name="enable">
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
 
-    <constraints>
-        <constraint name="cr_default">
-            <rule>enable inside {0, 1}</rule>
-            <rule>mode inside {MODE_A, MODE_B, MODE_C}</rule>
-        </constraint>
-        <constraint name="cr_dimensions">
-            <rule>data_width inside {[1:255]}</rule>
-            <rule>data_height inside {[1:255]}</rule>
-        </constraint>
-    </constraints>
-</register_config>
+    <Parameter name="chroma_enabled">
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+
+    <Parameter name="dither_enable">
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+
+    <Parameter name="clip_enable">
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- Geometry -->
+    <!-- ================================================================ -->
+
+    <Parameter name="width">
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+
+    <Parameter name="height">
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+
+    <Parameter name="IsInWidth">
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- Arithmetic / misc -->
+    <!-- ================================================================ -->
+
+    <Parameter name="arith_width">
+        <MinValue>1</MinValue>
+        <MaxValue>16</MaxValue>
+    </Parameter>
+
+    <Parameter name="stride">
+        <MinValue>1</MinValue>
+        <MaxValue>65536</MaxValue>
+        <TestConstraint>
+            $ % 16 == 0;
+        </TestConstraint>
+        <TestConstraint>
+            if (yuv_rdmaY_comp_64B_align)
+                $ % 64 == 0;
+        </TestConstraint>
+    </Parameter>
+
+    <Parameter name="fmt">
+        <MinValue>0</MinValue>
+        <MaxValue>15</MaxValue>
+    </Parameter>
+
+    <Parameter name="mode">
+        <MinValue>0</MinValue>
+        <MaxValue>7</MaxValue>
+    </Parameter>
+
+    <Parameter name="range">
+        <MinValue>0</MinValue>
+        <MaxValue>3</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- Signed / unsigned values -->
+    <!-- ================================================================ -->
+
+    <Parameter name="signed_val">
+        <MinValue>-32768</MinValue>
+        <MaxValue>32767</MaxValue>
+    </Parameter>
+
+    <Parameter name="unsigned_val">
+        <MinValue>0</MinValue>
+        <MaxValue>255</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- Matrix coefficients -->
+    <!-- ================================================================ -->
+
+    <Parameter name="c00"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c01"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c02"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c10"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c11"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c12"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c20"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c21"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+    <Parameter name="c22"><MinValue>-1024</MinValue><MaxValue>1024</MaxValue></Parameter>
+
+    <!-- ================================================================ -->
+    <!-- Offsets -->
+    <!-- ================================================================ -->
+
+    <Parameter name="y_offset">
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+
+    <Parameter name="uv_offset">
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+
+    <Parameter name="arith_y_offset">
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- RDMA / ISP relation -->
+    <!-- ================================================================ -->
+
+    <Parameter name="IsRdmaDataFormatYuv">
+        <MinValue>4</MinValue>
+        <MaxValue>33</MaxValue>
+        <TestConstraint>
+            $ inside {4,5,7,8,16,17,20,21,32,33};
+        </TestConstraint>
+        <TestConstraint>
+            if ($ inside {4,5,7,8})
+                IsInBittageType == 0;
+            else if ($ inside {16,17,32,33})
+                IsInBittageType == 1;
+            else
+                IsInBittageType == 3;
+        </TestConstraint>
+    </Parameter>
+
+    <Parameter name="IsInBittageType">
+        <MinValue>0</MinValue>
+        <MaxValue>3</MaxValue>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- ISP geometry -->
+    <!-- ================================================================ -->
+
+    <Parameter name="yuv_isp_image_active_width">
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>
+            $ <= width;
+        </TestConstraint>
+    </Parameter>
+
+    <Parameter name="yuv_isp_crop_width">
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>
+            $ <= yuv_isp_image_active_width;
+        </TestConstraint>
+    </Parameter>
+
+    <Parameter name="yuv_isp_image_crop_pre_x">
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>
+            $ + yuv_isp_crop_width <= width;
+        </TestConstraint>
+    </Parameter>
+
+    <!-- ================================================================ -->
+    <!-- ISP -->
+    <!-- ================================================================ -->
+
+    <Parameter name="yuv_isp_scale_y">
+        <MinValue>-8192</MinValue>
+        <MaxValue>8191</MaxValue>
+    </Parameter>
+
+    <Parameter name="yuv_isp_scale_shifter_y">
+        <MinValue>0</MinValue>
+        <MaxValue>15</MaxValue>
+    </Parameter>
+
+    <Parameter name="yuv_isp_org_height">
+        <MinValue>1</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+
+    <Parameter name="yuv_isp_image_active_height">
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>
+            $ <= yuv_isp_org_height;
+        </TestConstraint>
+    </Parameter>
+
+</FunctionMap>
