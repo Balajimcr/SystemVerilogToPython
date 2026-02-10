@@ -517,6 +517,18 @@ class isp_yuv2rgb_cfg;
 
     rand int unsigned rgb_isp_2d_table_0_0;
     rand int unsigned rgb_isp_2d_table_0_1;
+    rand int expr_add_a;
+    rand int expr_add_b;
+    rand int expr_cond_a;
+    rand int expr_cond_b;
+    rand bit [1:0] expr_cond_c;
+
+    constraint cr_expr_add_range {
+        expr_add_a inside {[-500:500]};
+        expr_add_b inside {[-500:500]};
+        expr_cond_a inside {[0:100]};
+        expr_cond_b inside {[0:100]};
+    }
 
     constraint cr_expr_inside_simple {
         rgb_isp_2d_table_0_0 inside {[0:512]};
@@ -527,14 +539,14 @@ class isp_yuv2rgb_cfg;
     }
 
     constraint cr_expr_inside_add {
-        (a + b) inside {[-100:100]};
+        (expr_add_a + expr_add_b) inside {[-100:100]};
     }
 
     constraint cr_expr_inside_in_condition {
-        if ((a - b) inside {1, 2, 3, 4})
-            c == 1;
+        if ((expr_cond_a - expr_cond_b) inside {1, 2, 3, 4})
+            expr_cond_c == 1;
         else
-            c == 0;
+            expr_cond_c == 0;
     }
 
 endclass
