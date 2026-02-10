@@ -1,13 +1,10 @@
 @echo off
 setlocal
 
+set "USER_WIN_PATH=%CD%"
+if "%USER_WIN_PATH:~-1%"=="\" set "USER_WIN_PATH=%USER_WIN_PATH:~0,-1%"
+
 cd /d "%~dp0"
-
-set "DEFAULT_WIN_PATH=%~dp0"
-if "%DEFAULT_WIN_PATH:~-1%"=="\" set "DEFAULT_WIN_PATH=%DEFAULT_WIN_PATH:~0,-1%"
-
-set /p USER_WIN_PATH=Enter Windows project path [%DEFAULT_WIN_PATH%]: 
-if "%USER_WIN_PATH%"=="" set "USER_WIN_PATH=%DEFAULT_WIN_PATH%"
 
 if not exist "%~dp0update_env_csh.py" (
     echo [ERROR] update_env_csh.py not found in %~dp0
