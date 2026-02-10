@@ -1,0 +1,9 @@
+{
+  "input_file_path": "C:/D/Project_Files/Samsung/SystemVerilogToPython/example_sv_classes.sv",
+  "hw_field_path": "C:\\D\\Project_Files\\Samsung\\SystemVerilogToPython\\hw_field.txt",
+  "class_name": "IspYuv2rgbCfg",
+  "num_vectors": 10,
+  "random_seed": 12345,
+  "output_dir": "./test_vectors",
+  "use_wsl": true
+}
