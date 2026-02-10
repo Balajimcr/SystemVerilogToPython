@@ -114,10 +114,20 @@ class IspYuv2rgbCfg:
     self.yuv_isp_image_active_width = vsc.rand_int32_t()
     self.yuv_isp_out_scale_x = vsc.rand_int32_t()
     self.yuv_isp_crop_width = vsc.rand_int32_t()
+    self.lit_add_x = vsc.rand_int32_t()
+    self.lit_add_y = vsc.rand_int32_t()
+    self.lit_mul_z = vsc.rand_int32_t()
+    self.lit_mul_w = vsc.rand_int32_t()
     self.yuv_isp_scale_y = vsc.rand_int32_t()
     self.yuv_isp_scale_shifter_y = vsc.rand_int32_t()
     self.yuv_isp_org_height = vsc.rand_int32_t()
     self.yuv_isp_image_active_height = vsc.rand_int32_t()
+    self.lit_tp_x = vsc.rand_int32_t()
+    self.lit_tp_y = vsc.rand_int32_t()
+    self.lit_tp_z = vsc.rand_int32_t()
+    self.lit_ap_x = vsc.rand_int32_t()
+    self.lit_ap_y = vsc.rand_int32_t()
+    self.lit_ap_z = vsc.rand_int32_t()
     self.rgb_isp_2d_table_0_0 = vsc.rand_uint32_t()
     self.rgb_isp_2d_table_0_1 = vsc.rand_uint32_t()
     self.expr_add_a = vsc.rand_int32_t()
@@ -427,12 +437,19 @@ class IspYuv2rgbCfg:
     self.yuv_isp_image_crop_pre_x <= vsc.unsigned(16384) - self.yuv_isp_image_active_width
 
   @vsc.constraint
+  def cr_lit_add_mul_range(self):
+    self.lit_add_x in vsc.rangelist(vsc.rng(-4096, 4095))
+    self.lit_add_y in vsc.rangelist(vsc.rng(-4096, 4095))
+    self.lit_mul_z in vsc.rangelist(vsc.rng(-4096, 4095))
+    self.lit_mul_w in vsc.rangelist(vsc.rng(-400, 400))
+
+  @vsc.constraint
   def cr_literal_add(self):
-    self.x <= vsc.unsigned(1000) + self.y
+    self.lit_add_x <= vsc.unsigned(1000) + self.lit_add_y
 
   @vsc.constraint
   def cr_literal_multiply(self):
-    self.z == vsc.unsigned(10) * self.w
+    self.lit_mul_z == vsc.unsigned(10) * self.lit_mul_w
 
   @vsc.constraint
   def cr_nested_arithmetic(self):
@@ -453,12 +470,21 @@ class IspYuv2rgbCfg:
       self.yuv_isp_scale_y == ((vsc.unsigned(3) * (vsc.unsigned(1) <<(vsc.unsigned(20) + self.yuv_isp_scale_shifter_y))+self.yuv_isp_image_active_height//2)//self.yuv_isp_image_active_height)
 
   @vsc.constraint
+  def cr_lit_paren_range(self):
+    self.lit_tp_y in vsc.rangelist(vsc.rng(-100, 100))
+    self.lit_tp_z in vsc.rangelist(vsc.rng(-100, 100))
+    self.lit_tp_x in vsc.rangelist(vsc.rng(-4096, 4095))
+    self.lit_ap_y in vsc.rangelist(vsc.rng(-10, 10))
+    self.lit_ap_z in vsc.rangelist(vsc.rng(-10, 10))
+    self.lit_ap_x in vsc.rangelist(vsc.rng(-4096, 4095))
+
+  @vsc.constraint
   def cr_literal_times_paren(self):
-    self.x == vsc.unsigned(5) * (self.y + self.z)
+    self.lit_tp_x == vsc.unsigned(5) * (self.lit_tp_y + self.lit_tp_z)
 
   @vsc.constraint
   def cr_literal_add_paren(self):
-    self.x == vsc.unsigned(100) + (self.y * self.z)
+    self.lit_ap_x == vsc.unsigned(100) + (self.lit_ap_y * self.lit_ap_z)
 
   @vsc.constraint
   def cr_expr_add_range(self):

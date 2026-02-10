@@ -465,12 +465,24 @@ class isp_yuv2rgb_cfg;
         yuv_isp_image_crop_pre_x <= 16384 - yuv_isp_image_active_width;
     }
 
+    rand int lit_add_x;
+    rand int lit_add_y;
+    rand int lit_mul_z;
+    rand int lit_mul_w;
+
+    constraint cr_lit_add_mul_range {
+        lit_add_x inside {[-4096:4095]};
+        lit_add_y inside {[-4096:4095]};
+        lit_mul_z inside {[-4096:4095]};
+        lit_mul_w inside {[-400:400]};
+    }
+
     constraint cr_literal_add {
-        x <= 1000 + y;
+        lit_add_x <= 1000 + lit_add_y;
     }
 
     constraint cr_literal_multiply {
-        z == 10 * w;
+        lit_mul_z == 10 * lit_mul_w;
     }
 
     constraint cr_nested_arithmetic {
@@ -503,12 +515,28 @@ class isp_yuv2rgb_cfg;
         }
     }
 
+    rand int lit_tp_x;
+    rand int lit_tp_y;
+    rand int lit_tp_z;
+    rand int lit_ap_x;
+    rand int lit_ap_y;
+    rand int lit_ap_z;
+
+    constraint cr_lit_paren_range {
+        lit_tp_y inside {[-100:100]};
+        lit_tp_z inside {[-100:100]};
+        lit_tp_x inside {[-4096:4095]};
+        lit_ap_y inside {[-10:10]};
+        lit_ap_z inside {[-10:10]};
+        lit_ap_x inside {[-4096:4095]};
+    }
+
     constraint cr_literal_times_paren {
-        x == 5 * (y + z);
+        lit_tp_x == 5 * (lit_tp_y + lit_tp_z);
     }
 
     constraint cr_literal_add_paren {
-        x == 100 + (y * z);
+        lit_ap_x == 100 + (lit_ap_y * lit_ap_z);
     }
 
     // ========================================================================
