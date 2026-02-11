@@ -373,8 +373,9 @@ def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> N
     """Parse xml_path and write the generated UVM random-item class to sv_path.
 
     If *top_csv_path* is provided (or defaults to ``<sv_stem>_top_params.csv``
-    next to *sv_path*), any ``<TopParameter>`` groups are extracted, exported
-    to the CSV, and **excluded** from the SV random class.
+    next to *sv_path*), any ``<TopParameter>`` groups are extracted and
+    exported to the CSV for external range control.  The TopParameter fields
+    are **kept** in the SV class — they are not filtered out.
     """
     # Read XML file
     print(f"Processing file: {xml_path} …", end=" ")
@@ -389,13 +390,9 @@ def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> N
     # Decode XML entities
     xml = _decode_entities(raw_xml)
 
-    # --- TopParameter extraction (Phase 1) ---
-    top_params, top_spans = _extract_top_parameters(xml)
+    # --- TopParameter extraction (export to CSV, but keep in SV) ---
+    top_params, _ = _extract_top_parameters(xml)
     if top_params:
-        # Build set of line indices that belong to TopParameter sections
-        top_line_set: set = set()
-        for start, end in top_spans:
-            top_line_set.update(range(start, end + 1))
         print(f"  Found {len(top_params)} TopParameter(s): "
               f"{', '.join(p.name for p in top_params)}")
 
@@ -404,29 +401,24 @@ def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> N
             sv_stem = Path(sv_path).stem
             top_csv_path = str(Path(sv_path).parent / f"{sv_stem}_top_params.csv")
         export_top_params_csv(top_params, top_csv_path)
-    else:
-        top_line_set = set()
 
     # Scan for IP name and collect Parameter/Field blocks
     ip_name = ""
     param_blocks: List[List[str]] = []
     field_blocks: List[List[str]] = []
     in_sim_parameter = False
+    in_top_parameter = False
 
     # Pre-index closing tags — O(n) once instead of O(n) per match
     param_close_idx = _build_close_index(xml, "</Parameter>")
     field_close_idx = _build_close_index(xml, "</Field>")
 
     for i, line in enumerate(xml):
-        # Skip lines inside TopParameter sections
-        if i in top_line_set:
-            continue
-
         # Extract IP name
         if 'FunctionMap IP' in line:
             ip_name = line.split('"')[1].lower()
 
-        # Track SimParameter blocks
+        # Track SimParameter blocks (skip entirely)
         stripped = line.strip()
         in_sim_parameter = (
             in_sim_parameter if not stripped.startswith("<SimParameter") else True
@@ -434,14 +426,18 @@ def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> N
         if stripped.startswith("</SimParameter"):
             in_sim_parameter = False
 
-        # Collect Parameter blocks (skip SimParameter)
+        # Track TopParameter wrapper tags (but process inner Parameters)
+        if stripped.startswith("<TopParameter") and not stripped.startswith("</TopParameter"):
+            in_top_parameter = True
+        if stripped.startswith("</TopParameter"):
+            in_top_parameter = False
+
+        # Collect Parameter blocks (skip SimParameter, include TopParameter)
         if not in_sim_parameter and _PATTERN_PARAM_NAME.search(line):
             end_idx = _find_close(param_close_idx, i + 1)
             if end_idx == -1:
                 end_idx = len(xml)
-            # Ensure the entire param block is outside TopParameter
-            if not any(idx in top_line_set for idx in range(i, end_idx + 1)):
-                param_blocks.append(xml[i:end_idx + 1])
+            param_blocks.append(xml[i:end_idx + 1])
 
         # Collect Field blocks
         if 'Field name' in line:
