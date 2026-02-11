@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FunctionMap IP="isp_yuv2rgb" Description="ISP YUV to RGB Conversion Configuration">
+    <Settings>
+        <GlobalDefaults>
+            <DefaultMinValue>0</DefaultMinValue>
+            <DefaultMaxValue>1</DefaultMaxValue>
+        </GlobalDefaults>
+    </Settings>
+
+    <!-- ===================================================================== -->
+    <!-- PARAMETERS - Generated from isp_yuv2rgb_rand_item SystemVerilog     -->
+    <!-- ===================================================================== -->
+    <Parameter name="IsBypassMode">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+        <TestConstraint>$ inside {0, 1};</TestConstraint>
+    </Parameter>
+    <Parameter name="IsYuvFormat">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>5</MaxValue>
+        <TestConstraint>$ inside {0,1,2,3,4,5};</TestConstraint>
+    </Parameter>
+    <Parameter name="IsImageWidth">
+        <NormalValue>1920</NormalValue>
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="IsImageHeight">
+        <NormalValue>1080</NormalValue>
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="IsGridMode">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+    <Parameter name="enable">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+    <Parameter name="chroma_enabled">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+    <Parameter name="dither_enable">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+    <Parameter name="clip_enable">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+    </Parameter>
+    <Parameter name="width">
+        <NormalValue>1920</NormalValue>
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="height">
+        <NormalValue>1080</NormalValue>
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="IsInWidth">
+        <NormalValue>1920</NormalValue>
+        <MinValue>64</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="arith_width">
+        <NormalValue>1</NormalValue>
+        <MinValue>1</MinValue>
+        <MaxValue>16</MaxValue>
+    </Parameter>
+    <Parameter name="stride">
+        <NormalValue>1920</NormalValue>
+        <MinValue>1</MinValue>
+        <MaxValue>65536</MaxValue>
+        <TestConstraint>$ % 16 == 0;
+if (yuv_rdmaY_comp_64B_align)
+                $ % 64 == 0;</TestConstraint>
+    </Parameter>
+    <Parameter name="fmt">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>15</MaxValue>
+    </Parameter>
+    <Parameter name="mode">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>7</MaxValue>
+    </Parameter>
+    <Parameter name="range">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>3</MaxValue>
+    </Parameter>
+    <Parameter name="signed_val">
+        <NormalValue>0</NormalValue>
+        <MinValue>-32768</MinValue>
+        <MaxValue>32767</MaxValue>
+    </Parameter>
+    <Parameter name="unsigned_val">
+        <NormalValue>128</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>255</MaxValue>
+    </Parameter>
+    <Parameter name="c00">
+        <NormalValue>298</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c01">
+        <NormalValue>0</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c02">
+        <NormalValue>409</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c10">
+        <NormalValue>298</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c11">
+        <NormalValue>-100</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c12">
+        <NormalValue>-208</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c20">
+        <NormalValue>298</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c21">
+        <NormalValue>516</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="c22">
+        <NormalValue>0</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="y_offset">
+        <NormalValue>0</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="uv_offset">
+        <NormalValue>0</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="arith_y_offset">
+        <NormalValue>0</NormalValue>
+        <MinValue>-1024</MinValue>
+        <MaxValue>1024</MaxValue>
+    </Parameter>
+    <Parameter name="IsRdmaDataFormatYuv">
+        <NormalValue>4</NormalValue>
+        <MinValue>4</MinValue>
+        <MaxValue>33</MaxValue>
+        <TestConstraint>$ inside {4,5,7,8,16,17,20,21,32,33};
+if ($ inside {4,5,7,8})
+                IsInBittageType == 0;
+            else if ($ inside {16,17,32,33})
+                IsInBittageType == 1;
+            else
+                IsInBittageType == 3;</TestConstraint>
+    </Parameter>
+    <Parameter name="IsInBittageType">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>3</MaxValue>
+    </Parameter>
+    <Parameter name="yuv_isp_image_active_width">
+        <NormalValue>1920</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>$ <= width;</TestConstraint>
+    </Parameter>
+    <Parameter name="yuv_isp_crop_width">
+        <NormalValue>1920</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>$ <= yuv_isp_image_active_width;</TestConstraint>
+    </Parameter>
+    <Parameter name="yuv_isp_image_crop_pre_x">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>$ + yuv_isp_crop_width <= width;</TestConstraint>
+    </Parameter>
+    <Parameter name="yuv_isp_scale_y">
+        <NormalValue>0</NormalValue>
+        <MinValue>-8192</MinValue>
+        <MaxValue>8191</MaxValue>
+    </Parameter>
+    <Parameter name="yuv_isp_scale_shifter_y">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>15</MaxValue>
+    </Parameter>
+    <Parameter name="yuv_isp_org_height">
+        <NormalValue>1080</NormalValue>
+        <MinValue>1</MinValue>
+        <MaxValue>16384</MaxValue>
+    </Parameter>
+    <Parameter name="yuv_isp_image_active_height">
+        <NormalValue>1080</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>16384</MaxValue>
+        <TestConstraint>$ <= yuv_isp_org_height;</TestConstraint>
+    </Parameter>
+
+    <!-- Additional parameter referenced in constraints -->
+    <Parameter name="yuv_rdmaY_comp_64B_align">
+        <NormalValue>0</NormalValue>
+        <MinValue>0</MinValue>
+        <MaxValue>1</MaxValue>
+        <TestConstraint>$ inside {0,1};</TestConstraint>
+    </Parameter>
+
+</FunctionMap>

@@ -80,19 +80,19 @@ echo.
 echo ============================================
 echo Step 0: XML to SV conversion (TopParam CSV)
 echo ============================================
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python XML_to_sv_Converter.py isp_yuv2rgb.xml isp_yuv2rgb.sv isp_yuv2rgb_top_params.csv"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python XML_to_sv_Converter.py example_sv_classes.xml example_sv_classes.sv example_sv_classes_top_params.csv"
 
 echo.
 echo ============================================
 echo Step 1: Translating SystemVerilog to PyVSC
 echo ============================================
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python sv_to_pyvsc.py isp_yuv2rgb.sv -o isp_yuv2rgb.py"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python sv_to_pyvsc.py example_sv_classes.sv -o example_sv_classes.py"
 
 echo.
 echo ============================================
 echo Step 2: Testing PyVSC randomization
 echo ============================================
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python isp_yuv2rgb.py"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python example_sv_classes.py"
 
 echo.
 echo ============================================
@@ -101,7 +101,7 @@ echo ============================================
 :: Use full HW field path so WSL can find it regardless of cwd
 :: --top-params passes the TopParameter CSV so overrides are applied and
 :: companion config_NNNN_top_params.txt files are generated per run
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py isp_yuv2rgb IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345 --top-params %WSL_PROJECT_PATH%/isp_yuv2rgb_top_params.csv"
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py example_sv_classes IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345 --top-params %WSL_PROJECT_PATH%/example_sv_classes_top_params.csv"
 
 echo.
 echo ============================================

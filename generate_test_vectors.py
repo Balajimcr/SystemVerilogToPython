@@ -311,12 +311,18 @@ def get_field_value(obj, field_name: str) -> Optional[Any]:
 
 def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
                          field_stats: Dict[str, FieldStats],
-                         top_overrides: Optional[Dict] = None) -> Dict[str, Any]:
+                         top_overrides: Optional[Dict] = None,
+                         ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Generate a single test vector by randomizing the object.
 
     If *top_overrides* is provided (and the top_param_override module is
     available), overrides are applied during randomization and as a
     post-clamp fallback.
+
+    Returns:
+        A tuple of (vector, top_values) where *vector* contains the
+        hw_field values and *top_values* contains the TopParameter field
+        values extracted from the same randomization run.
     """
     try:
         if top_overrides and _HAS_TOP_PARAM:
@@ -346,7 +352,15 @@ def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
     if top_overrides and _HAS_TOP_PARAM:
         vector = patch_vector_with_overrides(vector, top_overrides)
 
-    return vector
+    # Extract TopParameter values from the same randomization run
+    top_values: Dict[str, Any] = {}
+    if top_overrides:
+        for name in top_overrides:
+            value = get_field_value(obj, name)
+            if value is not None:
+                top_values[name] = value
+
+    return vector, top_values
 
 
 def _randomize_worker(args_tuple):
@@ -354,8 +368,12 @@ def _randomize_worker(args_tuple):
 
     Creates a fresh PyVSC instance per call to avoid any shared state.
     Each worker independently imports the module and instantiates the class.
+
+    The *top_param_names* element (6th) is a list of TopParameter field
+    names to extract from the randomized object.  These values are returned
+    as a separate dict so the caller can write companion top_params files.
     """
-    module_name, class_name, fields, run_id, seed = args_tuple
+    module_name, class_name, fields, run_id, seed, top_param_names = args_tuple
 
     # Per-run deterministic seed
     if seed is not None:
@@ -387,8 +405,15 @@ def _randomize_worker(args_tuple):
         else:
             vector[field_name] = default_value
 
+    # Extract TopParameter values for companion file
+    top_values: Dict[str, Any] = {}
+    for name in (top_param_names or []):
+        value = get_field_value(obj, name)
+        if value is not None:
+            top_values[name] = value
+
     elapsed = time.perf_counter() - t0
-    return run_id, vector, elapsed, failed
+    return run_id, vector, elapsed, failed, top_values
 
 
 def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int):
@@ -399,6 +424,27 @@ def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int
         f.write("#\n")
         for field_name, value in vector.items():
             f.write(f"{field_name} {value}\n")
+
+
+def write_top_params_file(top_values: Dict[str, Any], output_path: str, run_id: int):
+    """Write TopParameter field values for a single run to a companion file.
+
+    This produces a file alongside each config_NNNN.txt containing the
+    TopParameter values from that randomization run.  hw_field.txt does not
+    include TopParameter entries, so this companion file captures them
+    separately.
+
+    Args:
+        top_values: Dict mapping TopParameter name -> randomized value.
+        output_path: Destination file path (e.g. config_0000_top_params.txt).
+        run_id: Run index for the header comment.
+    """
+    with open(output_path, 'w') as f:
+        f.write(f"# TopParameter Values - Run {run_id}\n")
+        f.write(f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("#\n")
+        for name, value in top_values.items():
+            f.write(f"{name} {value}\n")
 
 
 def write_summary_file(vectors: List[Dict[str, Any]], output_dir: str,
@@ -769,17 +815,21 @@ Examples:
         # Parallel execution: each worker creates its own instance
         # NOTE: TopParameter overrides are applied as post-clamp in parallel
         # mode because workers can't share the override state easily.
+        top_param_names = list(top_overrides.keys()) if top_overrides else []
         worker_args = [
-            (args.pyvsc_module, args.class_name, fields, run_id, args.seed)
+            (args.pyvsc_module, args.class_name, fields, run_id, args.seed,
+             top_param_names)
             for run_id in range(args.num_runs)
         ]
+        all_top_values = [None] * args.num_runs  # TopParam values per run
         with multiprocessing.Pool(processes=num_jobs) as pool:
-            for run_id, vector, elapsed, failed in pool.imap_unordered(
+            for run_id, vector, elapsed, failed, top_values in pool.imap_unordered(
                     _randomize_worker, worker_args):
                 # Apply TopParameter post-clamp for parallel workers
                 if top_overrides and _HAS_TOP_PARAM:
                     vector = patch_vector_with_overrides(vector, top_overrides)
                 vectors[run_id] = vector
+                all_top_values[run_id] = top_values
                 total_solve_time += elapsed
                 if not failed:
                     successful += 1
@@ -801,12 +851,20 @@ Examples:
                 output_path = os.path.join(
                     args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
                 write_test_vector_file(vector, output_path, run_id)
+                # Write companion TopParameter file
+                if top_overrides and all_top_values[run_id]:
+                    top_path = os.path.join(
+                        args.output_dir,
+                        f"{args.prefix}_{run_id:04d}_top_params.txt")
+                    write_top_params_file(
+                        all_top_values[run_id], top_path, run_id)
     else:
         # Serial execution: reuse single instance (no state accumulation issue)
         for run_id in range(args.num_runs):
             t_iter = time.perf_counter()
-            vector = generate_test_vector(obj, fields, run_id, field_stats,
-                                          top_overrides=top_overrides)
+            vector, top_values = generate_test_vector(
+                obj, fields, run_id, field_stats,
+                top_overrides=top_overrides)
             elapsed = time.perf_counter() - t_iter
             total_solve_time += elapsed
             vectors[run_id] = vector
@@ -816,6 +874,13 @@ Examples:
                 output_path = os.path.join(
                     args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
                 write_test_vector_file(vector, output_path, run_id)
+
+                # Write companion TopParameter file
+                if top_overrides and top_values:
+                    top_path = os.path.join(
+                        args.output_dir,
+                        f"{args.prefix}_{run_id:04d}_top_params.txt")
+                    write_top_params_file(top_values, top_path, run_id)
 
             successful += 1
 
@@ -866,6 +931,9 @@ Examples:
         print(f"  ... and {len(fields) - 15} more fields (see field_statistics.csv)")
 
     print(f"\nOutput files:")
+    print(f"  - {args.prefix}_NNNN.txt              : Config file per run (hw_field values)")
+    if top_overrides:
+        print(f"  - {args.prefix}_NNNN_top_params.txt   : TopParameter values per run")
     print(f"  - test_vectors_summary.csv     : Basic CSV with all vectors")
     print(f"  - test_vectors_extended.csv    : CSV with statistics header")
     print(f"  - field_statistics.csv         : Statistics per field")

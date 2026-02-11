@@ -1,252 +1,565 @@
-// ============================================================================
-// ISP YUV → RGB Configuration
-// Range-complete, solver-stable, HW-realistic
-// ============================================================================
+class isp_yuv2rgb_rand_item extends uvm_sequence_item;
 
-// ---------------------------------------------------------------------------
-// ENUMS
-// ---------------------------------------------------------------------------
+ rand bit [31:0] IsBypassMode;
+ rand bit [31:0] IsYuvFormat;
+ rand bit [31:0] IsImageWidth;
+ rand bit [31:0] IsImageHeight;
+ rand bit [31:0] IsGridMode;
+ rand bit [31:0] enable;
+ rand bit [31:0] chroma_enabled;
+ rand bit [31:0] dither_enable;
+ rand bit [31:0] clip_enable;
+ rand bit [31:0] width;
+ rand bit [31:0] height;
+ rand bit [31:0] IsInWidth;
+ rand bit [31:0] arith_width;
+ rand bit [31:0] stride;
+ rand bit [31:0] fmt;
+ rand bit [31:0] mode;
+ rand bit [31:0] range;
+ rand bit signed [31:0] signed_val;
+ rand bit [31:0] unsigned_val;
+ rand bit signed [31:0] c00;
+ rand bit signed [31:0] c01;
+ rand bit signed [31:0] c02;
+ rand bit signed [31:0] c10;
+ rand bit signed [31:0] c11;
+ rand bit signed [31:0] c12;
+ rand bit signed [31:0] c20;
+ rand bit signed [31:0] c21;
+ rand bit signed [31:0] c22;
+ rand bit signed [31:0] y_offset;
+ rand bit signed [31:0] uv_offset;
+ rand bit signed [31:0] arith_y_offset;
+ rand bit [31:0] IsRdmaDataFormatYuv;
+ rand bit [31:0] IsInBittageType;
+ rand bit [31:0] yuv_isp_image_active_width;
+ rand bit [31:0] yuv_isp_crop_width;
+ rand bit [31:0] yuv_isp_image_crop_pre_x;
+ rand bit signed [31:0] yuv_isp_scale_y;
+ rand bit [31:0] yuv_isp_scale_shifter_y;
+ rand bit [31:0] yuv_isp_org_height;
+ rand bit [31:0] yuv_isp_image_active_height;
+ rand bit [31:0] yuv_format;
+ rand bit [31:0] yuv_packing;
+ rand bit [31:0] color_space;
+ rand bit [31:0] range_mode;
+ rand bit [31:0] rgb_format;
+ rand bit [31:0] yuv_bit_depth;
+ rand bit [31:0] bit_depth;
+ rand bit signed [31:0] a;
+ rand bit signed [31:0] b;
+ rand bit signed [31:0] c;
+ rand bit signed [31:0] d;
+ rand bit signed [31:0] x;
+ rand bit signed [31:0] y;
+ rand bit signed [31:0] z;
+ rand bit signed [31:0] w;
+ rand bit [31:0] ip_post_frame_gap;
+ rand bit [31:0] packet_size;
+ rand bit [31:0] delay_cycles;
+ rand bit [31:0] IsSrcCompType;
+ rand bit [31:0] yuv_rdmaY_img_stride_1p;
+ rand bit [31:0] yuv_rdmaY_sbwc_lossy_comp_mode;
+ rand bit [31:0] yuv_rdmaY_comp_64B_align;
+ rand bit [31:0] yuv_isp_out_scale_x;
 
-typedef enum int { YUV_444=0, YUV_422=1, YUV_420=2 } yuv_format_e;
-typedef enum int { PLANAR=0, SEMI_PLANAR=1, PACKED=2 } yuv_packing_e;
-typedef enum int { BT601=0, BT709=1, BT2020=2 } color_space_e;
-typedef enum int { FULL_RANGE=0, LIMITED_RANGE=1 } range_mode_e;
-typedef enum int { RGB_888=0, RGB_101010=1, RGB_121212=2 } rgb_format_e;
-typedef enum int { BIT_8=8, BIT_10=10, BIT_12=12 } bit_depth_e;
+`uvm_object_utils_begin(isp_yuv2rgb_rand_item)
+ `uvm_field_int(IsBypassMode, UVM_DEFAULT)
+ `uvm_field_int(IsYuvFormat, UVM_DEFAULT)
+ `uvm_field_int(IsImageWidth, UVM_DEFAULT)
+ `uvm_field_int(IsImageHeight, UVM_DEFAULT)
+ `uvm_field_int(IsGridMode, UVM_DEFAULT)
+ `uvm_field_int(enable, UVM_DEFAULT)
+ `uvm_field_int(chroma_enabled, UVM_DEFAULT)
+ `uvm_field_int(dither_enable, UVM_DEFAULT)
+ `uvm_field_int(clip_enable, UVM_DEFAULT)
+ `uvm_field_int(width, UVM_DEFAULT)
+ `uvm_field_int(height, UVM_DEFAULT)
+ `uvm_field_int(IsInWidth, UVM_DEFAULT)
+ `uvm_field_int(arith_width, UVM_DEFAULT)
+ `uvm_field_int(stride, UVM_DEFAULT)
+ `uvm_field_int(fmt, UVM_DEFAULT)
+ `uvm_field_int(mode, UVM_DEFAULT)
+ `uvm_field_int(range, UVM_DEFAULT)
+ `uvm_field_int(signed_val, UVM_DEFAULT)
+ `uvm_field_int(unsigned_val, UVM_DEFAULT)
+ `uvm_field_int(c00, UVM_DEFAULT)
+ `uvm_field_int(c01, UVM_DEFAULT)
+ `uvm_field_int(c02, UVM_DEFAULT)
+ `uvm_field_int(c10, UVM_DEFAULT)
+ `uvm_field_int(c11, UVM_DEFAULT)
+ `uvm_field_int(c12, UVM_DEFAULT)
+ `uvm_field_int(c20, UVM_DEFAULT)
+ `uvm_field_int(c21, UVM_DEFAULT)
+ `uvm_field_int(c22, UVM_DEFAULT)
+ `uvm_field_int(y_offset, UVM_DEFAULT)
+ `uvm_field_int(uv_offset, UVM_DEFAULT)
+ `uvm_field_int(arith_y_offset, UVM_DEFAULT)
+ `uvm_field_int(IsRdmaDataFormatYuv, UVM_DEFAULT)
+ `uvm_field_int(IsInBittageType, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_image_active_width, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_crop_width, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_image_crop_pre_x, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_scale_y, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_scale_shifter_y, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_org_height, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_image_active_height, UVM_DEFAULT)
+ `uvm_field_int(yuv_format, UVM_DEFAULT)
+ `uvm_field_int(yuv_packing, UVM_DEFAULT)
+ `uvm_field_int(color_space, UVM_DEFAULT)
+ `uvm_field_int(range_mode, UVM_DEFAULT)
+ `uvm_field_int(rgb_format, UVM_DEFAULT)
+ `uvm_field_int(yuv_bit_depth, UVM_DEFAULT)
+ `uvm_field_int(bit_depth, UVM_DEFAULT)
+ `uvm_field_int(a, UVM_DEFAULT)
+ `uvm_field_int(b, UVM_DEFAULT)
+ `uvm_field_int(c, UVM_DEFAULT)
+ `uvm_field_int(d, UVM_DEFAULT)
+ `uvm_field_int(x, UVM_DEFAULT)
+ `uvm_field_int(y, UVM_DEFAULT)
+ `uvm_field_int(z, UVM_DEFAULT)
+ `uvm_field_int(w, UVM_DEFAULT)
+ `uvm_field_int(ip_post_frame_gap, UVM_DEFAULT)
+ `uvm_field_int(packet_size, UVM_DEFAULT)
+ `uvm_field_int(delay_cycles, UVM_DEFAULT)
+ `uvm_field_int(IsSrcCompType, UVM_DEFAULT)
+ `uvm_field_int(yuv_rdmaY_img_stride_1p, UVM_DEFAULT)
+ `uvm_field_int(yuv_rdmaY_sbwc_lossy_comp_mode, UVM_DEFAULT)
+ `uvm_field_int(yuv_rdmaY_comp_64B_align, UVM_DEFAULT)
+ `uvm_field_int(yuv_isp_out_scale_x, UVM_DEFAULT)
+`uvm_object_utils_end
+   constraint CR_VAR_RANGE_IsBypassMode
+     {
+       (IsBypassMode >= 0 && IsBypassMode <= 1);
+     }
 
+   constraint CR_VAR_RANGE_IsYuvFormat
+     {
+       (IsYuvFormat >= 0 && IsYuvFormat <= 5);
+     }
 
-// ---------------------------------------------------------------------------
-// CONFIGURATION CLASS
-// ---------------------------------------------------------------------------
+   constraint CR_VAR_RANGE_IsImageWidth
+     {
+       (IsImageWidth >= 64 && IsImageWidth <= 16384);
+     }
 
-class isp_yuv2rgb_cfg;
+   constraint CR_VAR_RANGE_IsImageHeight
+     {
+       (IsImageHeight >= 64 && IsImageHeight <= 16384);
+     }
 
-    // -----------------------------------------------------------------------
-    // Core controls
-    // -----------------------------------------------------------------------
-    rand bit enable;
-    rand yuv_format_e yuv_format;
-    rand yuv_packing_e yuv_packing;
-    rand bit_depth_e yuv_bit_depth;
-    rand color_space_e color_space;
-    rand range_mode_e range_mode;
-    rand rgb_format_e rgb_format;
+   constraint CR_VAR_RANGE_IsGridMode
+     {
+       (IsGridMode >= 0 && IsGridMode <= 1);
+     }
 
-    // -----------------------------------------------------------------------
-    // Geometry
-    // -----------------------------------------------------------------------
-    rand int unsigned width;
-    rand int unsigned height;
+   constraint CR_VAR_RANGE_enable
+     {
+       (enable >= 0 && enable <= 1);
+     }
 
-    // -----------------------------------------------------------------------
-    // Feature enables
-    // -----------------------------------------------------------------------
-    rand bit chroma_enabled;
-    rand bit dither_enable;
-    rand bit clip_enable;
+   constraint CR_VAR_RANGE_chroma_enabled
+     {
+       (chroma_enabled >= 0 && chroma_enabled <= 1);
+     }
 
-    // -----------------------------------------------------------------------
-    // Matrix coefficients
-    // -----------------------------------------------------------------------
-    rand int signed c00;
-    rand int signed c01;
-    rand int signed c02;
-    rand int signed c10;
-    rand int signed c11;
-    rand int signed c12;
-    rand int signed c20;
-    rand int signed c21;
-    rand int signed c22;
+   constraint CR_VAR_RANGE_dither_enable
+     {
+       (dither_enable >= 0 && dither_enable <= 1);
+     }
 
-    // -----------------------------------------------------------------------
-    // Offsets
-    // -----------------------------------------------------------------------
-    rand int signed y_offset;
-    rand int signed uv_offset;
-    rand int signed arith_y_offset;
+   constraint CR_VAR_RANGE_clip_enable
+     {
+       (clip_enable >= 0 && clip_enable <= 1);
+     }
 
-    // -----------------------------------------------------------------------
-    // Arithmetic / misc
-    // -----------------------------------------------------------------------
-    rand int signed a;
-    rand int signed b;
-    rand int signed c;
-    rand int signed d;
-    rand int signed x;
-    rand int signed y;
-    rand int signed z;
-    rand int signed w;
+   constraint CR_VAR_RANGE_width
+     {
+       (width >= 64 && width <= 16384);
+     }
 
-    rand int unsigned arith_width;
-    rand int unsigned stride;
-    rand int unsigned fmt;
-    rand bit_depth_e bit_depth;
-    rand int signed signed_val;
-    rand int unsigned unsigned_val;
-    rand int unsigned mode;
-    rand int unsigned range;
+   constraint CR_VAR_RANGE_height
+     {
+       (height >= 64 && height <= 16384);
+     }
 
-    // -----------------------------------------------------------------------
-    // RDMA / ISP
-    // -----------------------------------------------------------------------
-    rand int unsigned IsRdmaDataFormatYuv;
-    rand yuv_format_e IsYuvFormat;
-    rand int unsigned IsInBittageType;
-    rand int unsigned IsSrcCompType;
-    rand int unsigned IsInWidth;
+   constraint CR_VAR_RANGE_IsInWidth
+     {
+       (IsInWidth >= 64 && IsInWidth <= 16384);
+     }
 
-    // -----------------------------------------------------------------------
-    // Stride / SBWC
-    // -----------------------------------------------------------------------
-    rand int unsigned yuv_rdmaY_img_stride_1p;
-    rand bit yuv_rdmaY_sbwc_lossy_comp_mode;
-    rand bit yuv_rdmaY_comp_64B_align;
+   constraint CR_VAR_RANGE_arith_width
+     {
+       (arith_width >= 1 && arith_width <= 16);
+     }
 
-    // -----------------------------------------------------------------------
-    // Packet / timing
-    // -----------------------------------------------------------------------
-    rand int unsigned ip_post_frame_gap;
-    rand int unsigned packet_size;
-    rand int unsigned delay_cycles;
+   constraint CR_VAR_RANGE_stride
+     {
+       (stride >= 1 && stride <= 65536);
+     }
 
-    // -----------------------------------------------------------------------
-    // Bypass / grid
-    // -----------------------------------------------------------------------
-    rand bit IsBypassMode;
-    rand bit IsGridMode;
+   constraint CR_VAR_RANGE_fmt
+     {
+       (fmt >= 0 && fmt <= 15);
+     }
 
-    // -----------------------------------------------------------------------
-    // ISP geometry
-    // -----------------------------------------------------------------------
-    rand int unsigned yuv_isp_image_crop_pre_x;
-    rand int unsigned yuv_isp_image_active_width;
-    rand int unsigned yuv_isp_out_scale_x;
-    rand int unsigned yuv_isp_crop_width;
+   constraint CR_VAR_RANGE_mode
+     {
+       (mode >= 0 && mode <= 7);
+     }
 
-    // -----------------------------------------------------------------------
-    // ISP
-    // -----------------------------------------------------------------------
-    rand int signed yuv_isp_scale_y;
-    rand int signed yuv_isp_scale_shifter_y;
-    rand int unsigned yuv_isp_org_height;
-    rand int unsigned yuv_isp_image_active_height;
+   constraint CR_VAR_RANGE_range
+     {
+       (range >= 0 && range <= 3);
+     }
 
-    // =======================================================================
-    // BASIC RANGE CONSTRAINTS
-    // =======================================================================
+   constraint CR_VAR_RANGE_signed_val
+     {
+       (signed_val >= -32768 && signed_val <= 32767);
+     }
 
-    constraint range_c {
-        enable inside {0,1};
-        chroma_enabled inside {0,1};
-        dither_enable inside {0,1};
-        clip_enable inside {0,1};
+   constraint CR_VAR_RANGE_unsigned_val
+     {
+       (unsigned_val >= 0 && unsigned_val <= 255);
+     }
 
-        width inside {[64:16384]};
-        height inside {[64:16384]};
-        IsInWidth inside {[64:16384]};
+   constraint CR_VAR_RANGE_c00
+     {
+       (c00 >= -1024 && c00 <= 1024);
+     }
 
-        arith_width inside {[1:16]};
-        stride inside {[1:65536]};
-        fmt inside {[0:15]};
-        mode inside {[0:7]};
-        range inside {[0:3]};
+   constraint CR_VAR_RANGE_c01
+     {
+       (c01 >= -1024 && c01 <= 1024);
+     }
 
-        signed_val inside {[-32768:32767]};
-        unsigned_val inside {[0:255]};
+   constraint CR_VAR_RANGE_c02
+     {
+       (c02 >= -1024 && c02 <= 1024);
+     }
 
-        ip_post_frame_gap inside {[0:1000]};
-        packet_size inside {[64:4096]};
-        delay_cycles inside {[0:100000]};
-    }
+   constraint CR_VAR_RANGE_c10
+     {
+       (c10 >= -1024 && c10 <= 1024);
+     }
 
-    // =======================================================================
-    // MATRIX / OFFSET CONSISTENCY
-    // =======================================================================
+   constraint CR_VAR_RANGE_c11
+     {
+       (c11 >= -1024 && c11 <= 1024);
+     }
 
-    constraint matrix_c {
-        c00 inside {[-1024:1024]};
-        c01 inside {[-1024:1024]};
-        c02 inside {[-1024:1024]};
-        c10 inside {[-1024:1024]};
-        c11 inside {[-1024:1024]};
-        c12 inside {[-1024:1024]};
-        c20 inside {[-1024:1024]};
-        c21 inside {[-1024:1024]};
-        c22 inside {[-1024:1024]};
+   constraint CR_VAR_RANGE_c12
+     {
+       (c12 >= -1024 && c12 <= 1024);
+     }
 
-        y_offset inside {[-1024:1024]};
-        uv_offset inside {[-1024:1024]};
-        arith_y_offset inside {[-1024:1024]};
-    }
+   constraint CR_VAR_RANGE_c20
+     {
+       (c20 >= -1024 && c20 <= 1024);
+     }
 
-    // =======================================================================
-    // FORMAT / BIT-DEPTH COHERENCY
-    // =======================================================================
+   constraint CR_VAR_RANGE_c21
+     {
+       (c21 >= -1024 && c21 <= 1024);
+     }
 
-    constraint format_c {
-        bit_depth inside {BIT_8, BIT_10, BIT_12};
-        yuv_bit_depth == bit_depth;
+   constraint CR_VAR_RANGE_c22
+     {
+       (c22 >= -1024 && c22 <= 1024);
+     }
 
-        if (rgb_format == RGB_888)
-            bit_depth == BIT_8;
-        else
-            bit_depth inside {BIT_10, BIT_12};
-    }
+   constraint CR_VAR_RANGE_y_offset
+     {
+       (y_offset >= -1024 && y_offset <= 1024);
+     }
 
-    // =======================================================================
-    // YUV FORMAT / PACKING RULES
-    // =======================================================================
+   constraint CR_VAR_RANGE_uv_offset
+     {
+       (uv_offset >= -1024 && uv_offset <= 1024);
+     }
 
-    constraint packing_c {
-        if (yuv_format == YUV_420)
-            yuv_packing != PACKED;
-    }
+   constraint CR_VAR_RANGE_arith_y_offset
+     {
+       (arith_y_offset >= -1024 && arith_y_offset <= 1024);
+     }
 
-    // =======================================================================
-    // STRIDE & ALIGNMENT
-    // =======================================================================
+   constraint CR_VAR_RANGE_IsRdmaDataFormatYuv
+     {
+       (IsRdmaDataFormatYuv >= 4 && IsRdmaDataFormatYuv <= 33);
+     }
 
-    constraint stride_c {
-        stride % 16 == 0;
+   constraint CR_VAR_RANGE_IsInBittageType
+     {
+       (IsInBittageType >= 0 && IsInBittageType <= 3);
+     }
 
-        if (yuv_rdmaY_comp_64B_align)
-            stride % 64 == 0;
-    }
+   constraint CR_VAR_RANGE_yuv_isp_image_active_width
+     {
+       (yuv_isp_image_active_width >= 0 && yuv_isp_image_active_width <= 16384);
+     }
 
-    // =======================================================================
-    // RDMA → ISP RELATION
-    // =======================================================================
+   constraint CR_VAR_RANGE_yuv_isp_crop_width
+     {
+       (yuv_isp_crop_width >= 0 && yuv_isp_crop_width <= 16384);
+     }
 
-    constraint rdma_c {
-        IsRdmaDataFormatYuv inside {4,5,7,8,16,17,20,21,32,33};
-        IsYuvFormat == yuv_format;
+   constraint CR_VAR_RANGE_yuv_isp_image_crop_pre_x
+     {
+       (yuv_isp_image_crop_pre_x >= 0 && yuv_isp_image_crop_pre_x <= 16384);
+     }
 
-        if (IsRdmaDataFormatYuv inside {4,5,7,8})
-            IsInBittageType == 0;
-        else if (IsRdmaDataFormatYuv inside {16,17,32,33})
-            IsInBittageType == 1;
-        else
-            IsInBittageType == 3;
-    }
+   constraint CR_VAR_RANGE_yuv_isp_scale_y
+     {
+       (yuv_isp_scale_y >= -8192 && yuv_isp_scale_y <= 8191);
+     }
 
-    // =======================================================================
-    // GEOMETRY RELATIONS
-    // =======================================================================
+   constraint CR_VAR_RANGE_yuv_isp_scale_shifter_y
+     {
+       (yuv_isp_scale_shifter_y >= 0 && yuv_isp_scale_shifter_y <= 15);
+     }
 
-    constraint geometry_c {
-        yuv_isp_image_active_width <= width;
-        yuv_isp_crop_width <= yuv_isp_image_active_width;
-        yuv_isp_image_crop_pre_x + yuv_isp_crop_width <= width;
-    }
+   constraint CR_VAR_RANGE_yuv_isp_org_height
+     {
+       (yuv_isp_org_height >= 1 && yuv_isp_org_height <= 16384);
+     }
 
-    // =======================================================================
-    // ISP CONSISTENCY
-    // =======================================================================
+   constraint CR_VAR_RANGE_yuv_isp_image_active_height
+     {
+       (yuv_isp_image_active_height >= 0 && yuv_isp_image_active_height <= 16384);
+     }
 
-    constraint isp_c {
-        yuv_isp_scale_y inside {[-8192:8191]};
-        yuv_isp_scale_shifter_y inside {[0:15]};
-        yuv_isp_image_active_height <= yuv_isp_org_height;
-    }
+   constraint CR_VAR_RANGE_yuv_format
+     {
+       (yuv_format >= 0 && yuv_format <= 2);
+     }
+
+   constraint CR_VAR_RANGE_yuv_packing
+     {
+       (yuv_packing >= 0 && yuv_packing <= 2);
+     }
+
+   constraint CR_VAR_RANGE_color_space
+     {
+       (color_space >= 0 && color_space <= 2);
+     }
+
+   constraint CR_VAR_RANGE_range_mode
+     {
+       (range_mode >= 0 && range_mode <= 1);
+     }
+
+   constraint CR_VAR_RANGE_rgb_format
+     {
+       (rgb_format >= 0 && rgb_format <= 2);
+     }
+
+   constraint CR_VAR_RANGE_yuv_bit_depth
+     {
+       (yuv_bit_depth >= 8 && yuv_bit_depth <= 12);
+     }
+
+   constraint CR_VAR_RANGE_bit_depth
+     {
+       (bit_depth >= 8 && bit_depth <= 12);
+     }
+
+   constraint CR_VAR_RANGE_a
+     {
+       (a >= -32768 && a <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_b
+     {
+       (b >= -32768 && b <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_c
+     {
+       (c >= -32768 && c <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_d
+     {
+       (d >= -32768 && d <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_x
+     {
+       (x >= -32768 && x <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_y
+     {
+       (y >= -32768 && y <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_z
+     {
+       (z >= -32768 && z <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_w
+     {
+       (w >= -32768 && w <= 32767);
+     }
+
+   constraint CR_VAR_RANGE_ip_post_frame_gap
+     {
+       (ip_post_frame_gap >= 0 && ip_post_frame_gap <= 1000);
+     }
+
+   constraint CR_VAR_RANGE_packet_size
+     {
+       (packet_size >= 64 && packet_size <= 4096);
+     }
+
+   constraint CR_VAR_RANGE_delay_cycles
+     {
+       (delay_cycles >= 0 && delay_cycles <= 100000);
+     }
+
+   constraint CR_VAR_RANGE_IsSrcCompType
+     {
+       (IsSrcCompType >= 0 && IsSrcCompType <= 3);
+     }
+
+   constraint CR_VAR_RANGE_yuv_rdmaY_img_stride_1p
+     {
+       (yuv_rdmaY_img_stride_1p >= 1 && yuv_rdmaY_img_stride_1p <= 65536);
+     }
+
+   constraint CR_VAR_RANGE_yuv_rdmaY_sbwc_lossy_comp_mode
+     {
+       (yuv_rdmaY_sbwc_lossy_comp_mode >= 0 && yuv_rdmaY_sbwc_lossy_comp_mode <= 1);
+     }
+
+   constraint CR_VAR_RANGE_yuv_rdmaY_comp_64B_align
+     {
+       (yuv_rdmaY_comp_64B_align >= 0 && yuv_rdmaY_comp_64B_align <= 1);
+     }
+
+   constraint CR_VAR_RANGE_yuv_isp_out_scale_x
+     {
+       (yuv_isp_out_scale_x >= 0 && yuv_isp_out_scale_x <= 16384);
+     }
+
+   constraint cr0
+     {
+       
+       IsBypassMode inside {0, 1};
+                   
+     }
+
+   constraint cr1
+     {
+       
+       IsYuvFormat inside {0,1,2,3,4,5};
+                   
+     }
+
+   constraint cr13
+     {
+       
+       stride % 16 == 0;
+               
+       
+       if (yuv_rdmaY_comp_64B_align)
+       stride % 64 == 0;
+               
+     }
+
+   constraint cr31
+     {
+       
+       IsRdmaDataFormatYuv inside {4,5,7,8,16,17,20,21,32,33};
+               
+       
+       if (IsRdmaDataFormatYuv inside {4,5,7,8})
+       IsInBittageType == 0;
+       else if (IsRdmaDataFormatYuv inside {16,17,32,33})
+       IsInBittageType == 1;
+       else
+       IsInBittageType == 3;
+               
+     }
+
+   constraint cr33
+     {
+       
+       yuv_isp_image_active_width <= width;
+               
+     }
+
+   constraint cr34
+     {
+       
+       yuv_isp_crop_width <= yuv_isp_image_active_width;
+               
+     }
+
+   constraint cr35
+     {
+       
+       yuv_isp_image_crop_pre_x + yuv_isp_crop_width <= width;
+               
+     }
+
+   constraint cr39
+     {
+       
+       yuv_isp_image_active_height <= yuv_isp_org_height;
+               
+     }
+
+   constraint cr40
+     {
+       yuv_format inside {0,1,2};
+     }
+
+   constraint cr41
+     {
+       yuv_packing inside {0,1,2};
+     }
+
+   constraint cr42
+     {
+       color_space inside {0,1,2};
+     }
+
+   constraint cr43
+     {
+       range_mode inside {0,1};
+     }
+
+   constraint cr44
+     {
+       rgb_format inside {0,1,2};
+     }
+
+   constraint cr45
+     {
+       yuv_bit_depth inside {8,10,12};
+     }
+
+   constraint cr46
+     {
+       bit_depth inside {8,10,12};
+     }
+
+   constraint cr59
+     {
+       yuv_rdmaY_img_stride_1p % 16 == 0;
+     }
+
+   constraint cr60
+     {
+       yuv_rdmaY_sbwc_lossy_comp_mode inside {0,1};
+     }
+
+   constraint cr61
+     {
+       yuv_rdmaY_comp_64B_align inside {0,1};
+     }
 
 endclass

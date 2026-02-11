@@ -250,4 +250,143 @@
         </TestConstraint>
     </Parameter>
 
+
+        <!-- ===== ADDED MISSING PARAMETERS ===== -->
+        <!-- Core Controls (Enums) -->
+        <!-- Core Controls (Enums) -->
+        <Parameter name="yuv_format">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>2</MaxValue>
+            <TestConstraint>$ inside {0,1,2};</TestConstraint>
+        </Parameter>
+        <Parameter name="yuv_packing">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>2</MaxValue>
+            <TestConstraint>$ inside {0,1,2};</TestConstraint>
+        </Parameter>
+        <Parameter name="color_space">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>2</MaxValue>
+            <TestConstraint>$ inside {0,1,2};</TestConstraint>
+        </Parameter>
+        <Parameter name="range_mode">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1</MaxValue>
+            <TestConstraint>$ inside {0,1};</TestConstraint>
+        </Parameter>
+        <Parameter name="rgb_format">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>2</MaxValue>
+            <TestConstraint>$ inside {0,1,2};</TestConstraint>
+        </Parameter>
+        <Parameter name="yuv_bit_depth">
+            <NormalValue>8</NormalValue>
+            <MinValue>8</MinValue>
+            <MaxValue>12</MaxValue>
+            <TestConstraint>$ inside {8,10,12};</TestConstraint>
+        </Parameter>
+        <Parameter name="bit_depth">
+            <NormalValue>8</NormalValue>
+            <MinValue>8</MinValue>
+            <MaxValue>12</MaxValue>
+            <TestConstraint>$ inside {8,10,12};</TestConstraint>
+        </Parameter>
+
+        <!-- Arithmetic Variables -->
+        <Parameter name="a">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="b">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="c">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="d">
+            <NormalValue>1</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="x">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="y">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="z">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+        <Parameter name="w">
+            <NormalValue>0</NormalValue>
+            <MinValue>-32768</MinValue>
+            <MaxValue>32767</MaxValue>
+        </Parameter>
+
+        <!-- Packet/Timing Controls -->
+        <Parameter name="ip_post_frame_gap">
+            <NormalValue>100</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1000</MaxValue>
+        </Parameter>
+        <Parameter name="packet_size">
+            <NormalValue>256</NormalValue>
+            <MinValue>64</MinValue>
+            <MaxValue>4096</MaxValue>
+        </Parameter>
+        <Parameter name="delay_cycles">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>100000</MaxValue>
+        </Parameter>
+
+        <!-- RDMA/ISP Configuration -->
+        <Parameter name="IsSrcCompType">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>3</MaxValue>
+        </Parameter>
+        <Parameter name="yuv_rdmaY_img_stride_1p">
+            <NormalValue>1920</NormalValue>
+            <MinValue>1</MinValue>
+            <MaxValue>65536</MaxValue>
+            <TestConstraint>$ % 16 == 0;</TestConstraint>
+        </Parameter>
+        <Parameter name="yuv_rdmaY_sbwc_lossy_comp_mode">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1</MaxValue>
+            <TestConstraint>$ inside {0,1};</TestConstraint>
+        </Parameter>
+        <Parameter name="yuv_rdmaY_comp_64B_align">
+            <NormalValue>0</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>1</MaxValue>
+            <TestConstraint>$ inside {0,1};</TestConstraint>
+        </Parameter>
+
+        <!-- ISP Geometry -->
+        <Parameter name="yuv_isp_out_scale_x">
+            <NormalValue>8192</NormalValue>
+            <MinValue>0</MinValue>
+            <MaxValue>16384</MaxValue>
+        </Parameter>
+        <!-- ===== END OF ADDED PARAMETERS ===== -->
+
 </FunctionMap>

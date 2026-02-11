@@ -13,6 +13,7 @@ Version: 1.1.0
 """
 
 import re
+import ast
 import argparse
 import sys
 import textwrap
@@ -673,6 +674,9 @@ class PyVSCGenerator:
             leak_issues = self._check_sv_syntax_leaks(final_code)
             for issue in leak_issues:
                 self._add_warning(issue)
+
+        # Final hard sanity enforcement
+        enforce_strict_sanity(final_code)
 
         return TranslationResult(
             pyvsc_code=final_code,
@@ -2997,6 +3001,142 @@ class SVtoPyVSCTranslator:
 # =============================================================================
 # CLI INTERFACE
 # =============================================================================
+
+# =============================================================================
+# STRICT SV -> PYVSC SANITY VALIDATOR (False-Positive Safe)
+# =============================================================================
+
+@dataclass
+class SanityIssue:
+    line: int
+    severity: str  # "ERROR" or "WARNING"
+    message: str
+    content: str
+
+
+class PyVSCSanityValidator:
+    """
+    Structural validator to ensure no SystemVerilog syntax
+    leaks into generated Python code.
+    """
+
+    # Strict SV constructs that must never appear in Python code
+    SV_HARD_PATTERNS = {
+        r"\binside\s*\{": "SV inside {...} block detected",
+        r"\bdist\s*\{": "SV dist {...} block detected",
+        r"\bsolve\s+\w+\s+before\b": "SV solve-before syntax detected",
+        r"\bforeach\s*\(": "SV foreach(...) syntax detected",
+        r"\bunique\s*\{": "SV unique {...} syntax detected",
+        r"\bconstraint\s+\w+": "SV constraint block detected",
+        r"\bclass\s+\w+\s*;": "SV class declaration syntax detected",
+        r"\d+'\s*[hHbBdDoO]": "SV number literal (e.g. 8'hFF) detected",
+        r"\$\w+": "SV system function (e.g. $urandom) detected",
+    }
+
+    # Logical operators that must not remain
+    SV_OPERATOR_PATTERNS = {
+        r"\s&&\s": "SV logical '&&' detected",
+        r"\s\|\|\s": "SV logical '||' detected",
+        r"!\s*(?!=)": "SV logical '!' detected (should be 'not')",
+    }
+
+    def validate(self, python_code: str) -> List[SanityIssue]:
+        issues: List[SanityIssue] = []
+
+        # Step 1 - Ensure Python syntax is valid
+        try:
+            ast.parse(python_code)
+        except SyntaxError as e:
+            issues.append(
+                SanityIssue(
+                    line=e.lineno or 0,
+                    severity="ERROR",
+                    message="Generated Python is syntactically invalid",
+                    content=str(e.text).strip() if e.text else "",
+                )
+            )
+            return issues  # No need to continue
+
+        # Step 2 - Scan line by line safely
+        in_docstring = False
+        doc_delim = None
+
+        for lineno, line in enumerate(python_code.splitlines(), 1):
+            stripped = line.strip()
+
+            # Track docstrings properly
+            if not in_docstring:
+                if stripped.startswith('"""') or stripped.startswith("'''"):
+                    doc_delim = stripped[:3]
+                    if stripped.count(doc_delim) == 1:
+                        in_docstring = True
+                    continue
+            else:
+                if doc_delim in stripped:
+                    in_docstring = False
+                continue
+
+            # Ignore comments
+            if stripped.startswith("#"):
+                continue
+
+            # Remove inline comments
+            code_part = line.split("#")[0].strip()
+            if not code_part:
+                continue
+
+            # Ignore valid pyvsc API usage
+            if code_part.startswith("self.") or "vsc." in code_part:
+                pass
+
+            # HARD SV constructs
+            for pattern, message in self.SV_HARD_PATTERNS.items():
+                if re.search(pattern, code_part):
+                    issues.append(
+                        SanityIssue(
+                            line=lineno,
+                            severity="ERROR",
+                            message=message,
+                            content=code_part,
+                        )
+                    )
+
+            # SV logical operators
+            for pattern, message in self.SV_OPERATOR_PATTERNS.items():
+                if re.search(pattern, code_part):
+                    issues.append(
+                        SanityIssue(
+                            line=lineno,
+                            severity="ERROR",
+                            message=message,
+                            content=code_part,
+                        )
+                    )
+
+        return issues
+
+
+def enforce_strict_sanity(python_code: str):
+    """
+    Hard-fail if illegal SV syntax is detected.
+    """
+    validator = PyVSCSanityValidator()
+    issues = validator.validate(python_code)
+
+    if issues:
+        print("\n" + "=" * 80)
+        print("❌ SANITY CHECK FAILED")
+        print("=" * 80)
+        for issue in issues:
+            print(
+                f"[{issue.severity}] Line {issue.line}: "
+                f"{issue.message}\n    -> {issue.content}"
+            )
+        print("=" * 80)
+        raise RuntimeError("SystemVerilog syntax leak detected.")
+    else:
+        print("✅ Sanity check passed. No SV syntax leaks detected.")
+
 
 def _expand_input_paths(input_arg: str) -> List[Path]:
     """Expand input argument into a list of .sv files."""
