@@ -250,7 +250,6 @@ def export_top_params_csv(
                 p.override_max,
                 tc_str,
             ])
-    print(f"TopParameter CSV exported: {csv_path}  ({len(top_params)} entries)")
 
 
 def load_top_params_csv(csv_path: str) -> List[TopParamInfo]:
@@ -393,9 +392,6 @@ def generate_rand_item(xml_path: str, sv_path: str, top_csv_path: str = "") -> N
     # --- TopParameter extraction (export to CSV, but keep in SV) ---
     top_params, _ = _extract_top_parameters(xml)
     if top_params:
-        print(f"  Found {len(top_params)} TopParameter(s): "
-              f"{', '.join(p.name for p in top_params)}")
-
         # Default CSV path: alongside SV output
         if not top_csv_path:
             sv_stem = Path(sv_path).stem
