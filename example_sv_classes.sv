@@ -40,6 +40,7 @@ class isp_yuv2rgb_rand_item extends uvm_sequence_item;
  rand bit [31:0] yuv_isp_scale_shifter_y;
  rand bit [31:0] yuv_isp_org_height;
  rand bit [31:0] yuv_isp_image_active_height;
+ rand bit [31:0] yuv_rdmaY_comp_64B_align;
 
 `uvm_object_utils_begin(isp_yuv2rgb_rand_item)
  `uvm_field_int(IsBypassMode, UVM_DEFAULT)
@@ -82,6 +83,7 @@ class isp_yuv2rgb_rand_item extends uvm_sequence_item;
  `uvm_field_int(yuv_isp_scale_shifter_y, UVM_DEFAULT)
  `uvm_field_int(yuv_isp_org_height, UVM_DEFAULT)
  `uvm_field_int(yuv_isp_image_active_height, UVM_DEFAULT)
+ `uvm_field_int(yuv_rdmaY_comp_64B_align, UVM_DEFAULT)
 `uvm_object_utils_end
    constraint CR_VAR_RANGE_IsBypassMode
      {
@@ -283,72 +285,62 @@ class isp_yuv2rgb_rand_item extends uvm_sequence_item;
        (yuv_isp_image_active_height >= 0 && yuv_isp_image_active_height <= 16384);
      }
 
+   constraint CR_VAR_RANGE_yuv_rdmaY_comp_64B_align
+     {
+       (yuv_rdmaY_comp_64B_align >= 0 && yuv_rdmaY_comp_64B_align <= 1);
+     }
+
    constraint cr0
      {
-       
        IsBypassMode inside {0, 1};
-                   
      }
 
    constraint cr1
      {
-       
        IsYuvFormat inside {0,1,2,3,4,5};
-                   
      }
 
    constraint cr13
      {
-       
        stride % 16 == 0;
-               
-       
        if (yuv_rdmaY_comp_64B_align)
-       stride % 64 == 0;
-               
+                       stride % 64 == 0;
      }
 
    constraint cr31
      {
-       
        IsRdmaDataFormatYuv inside {4,5,7,8,16,17,20,21,32,33};
-               
-       
        if (IsRdmaDataFormatYuv inside {4,5,7,8})
        IsInBittageType == 0;
        else if (IsRdmaDataFormatYuv inside {16,17,32,33})
        IsInBittageType == 1;
        else
-       IsInBittageType == 3;
-               
+                       IsInBittageType == 3;
      }
 
    constraint cr33
      {
-       
        yuv_isp_image_active_width <= width;
-               
      }
 
    constraint cr34
      {
-       
        yuv_isp_crop_width <= yuv_isp_image_active_width;
-               
      }
 
    constraint cr35
      {
-       
        yuv_isp_image_crop_pre_x + yuv_isp_crop_width <= width;
-               
      }
 
    constraint cr39
      {
-       
        yuv_isp_image_active_height <= yuv_isp_org_height;
-               
+     }
+
+   constraint cr40
+     {
+       yuv_rdmaY_comp_64B_align inside {0,1};
      }
 
 endclass

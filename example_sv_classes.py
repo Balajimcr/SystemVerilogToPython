@@ -78,6 +78,7 @@ class IspYuv2rgbRandItem(UvmSequenceItem):
     self.yuv_isp_scale_shifter_y = vsc.rand_bit_t(32)
     self.yuv_isp_org_height = vsc.rand_bit_t(32)
     self.yuv_isp_image_active_height = vsc.rand_bit_t(32)
+    self.yuv_rdmaY_comp_64B_align = vsc.rand_bit_t(32)
 
   @vsc.constraint
   def parameter_range(self):
@@ -121,6 +122,7 @@ class IspYuv2rgbRandItem(UvmSequenceItem):
     self.yuv_isp_scale_shifter_y in vsc.rangelist(vsc.rng(0, 15))
     self.yuv_isp_org_height in vsc.rangelist(vsc.rng(1, 16384))
     self.yuv_isp_image_active_height in vsc.rangelist(vsc.rng(0, 16384))
+    self.yuv_rdmaY_comp_64B_align in vsc.rangelist(vsc.rng(0, 1))
 
   @vsc.constraint
   def cr0(self):
@@ -161,6 +163,10 @@ class IspYuv2rgbRandItem(UvmSequenceItem):
   @vsc.constraint
   def cr39(self):
     self.yuv_isp_image_active_height <= self.yuv_isp_org_height
+
+  @vsc.constraint
+  def cr40(self):
+    self.yuv_rdmaY_comp_64B_align in vsc.rangelist(0, 1)
 
 # =============================================================================
 # USAGE EXAMPLE

@@ -226,13 +226,10 @@ if ($ inside {4,5,7,8})
         <MaxValue>16384</MaxValue>
         <TestConstraint>$ <= yuv_isp_org_height;</TestConstraint>
     </Parameter>
-
-    <!-- Additional parameter referenced in constraints -->
     <Parameter name="yuv_rdmaY_comp_64B_align">
         <NormalValue>0</NormalValue>
         <MinValue>0</MinValue>
         <MaxValue>1</MaxValue>
         <TestConstraint>$ inside {0,1};</TestConstraint>
     </Parameter>
-
 </FunctionMap>
