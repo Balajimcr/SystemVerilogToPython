@@ -680,8 +680,8 @@ class PyVSCGenerator:
             for issue in leak_issues:
                 self._add_warning(issue)
 
-        # Final hard sanity enforcement
-        enforce_strict_sanity(final_code)
+        original_sv_dump = "\n\n".join(cls.original_code for cls in sv_classes)
+        enforce_strict_sanity(final_code, original_sv_dump)
 
         return TranslationResult(
             pyvsc_code=final_code,
@@ -3305,26 +3305,47 @@ class PyVSCSanityValidator:
         return issues
 
 
-def enforce_strict_sanity(python_code: str):
+def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = None):
     """
-    Hard-fail if illegal SV syntax is detected.
+    Perform sanity validation.
+    If syntax leaks are found:
+        - Print detailed debug report
+        - DO NOT stop execution
     """
     validator = PyVSCSanityValidator()
     issues = validator.validate(python_code)
 
     if issues:
         print("\n" + "=" * 80)
-        print("❌ SANITY CHECK FAILED")
+        print("⚠️  SANITY CHECK FAILED (PROCESS CONTINUES)")
         print("=" * 80)
+
         for issue in issues:
             print(
                 f"[{issue.severity}] Line {issue.line}: "
                 f"{issue.message}\n    -> {issue.content}"
             )
-        print("=" * 80)
-        print("❌ SystemVerilog syntax leak detected.")
+
+        print("\n" + "-" * 80)
+        print("🔎 ORIGINAL SYSTEMVERILOG SOURCE")
+        print("-" * 80)
+        if original_sv_code:
+            print(original_sv_code.strip())
+        else:
+            print("Original SV code not available")
+
+        print("\n" + "-" * 80)
+        print("🔎 GENERATED PYVSC OUTPUT")
+        print("-" * 80)
+        print(python_code.strip())
+
+        print("\n" + "=" * 80)
+        print("⚠️  Sanity issues detected. PyVSC file still generated.")
+        print("=" * 80 + "\n")
+
     else:
         print("✅ Sanity check passed. No SV syntax leaks detected.")
+
 
 
 def _expand_input_paths(input_arg: str) -> List[Path]:
