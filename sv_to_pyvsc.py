@@ -580,6 +580,11 @@ class PyVSCGenerator:
         self.manual_review_items: List[str] = []
         self.mapping_notes: List[str] = []
         self.statistics: Dict[str, int] = {}
+        self._warnings_set: set = set()
+        self._review_set: set = set()
+        self.enum_value_map: Dict[str, str] = {}
+        self.enum_class_names: set = set()
+        self._current_loop_vars: set = set()
 
     def generate(self, sv_classes: List[SVClass], jobs: int = 1, progress: bool = False) -> TranslationResult:
         """Generate pyvsc code for all classes."""
@@ -918,14 +923,24 @@ class PyVSCGenerator:
             # Check for SV patterns only in code part
             if 'inside {' in code_part and 'vsc.rangelist' not in code_part:
                 issues.append(f"Line {line_num}: SV 'inside' syntax found in code")
+            elif '.inside {' in code_part and 'vsc.rangelist' not in code_part:
+                issues.append(f"Line {line_num}: SV '.inside' residue found in code")
             elif 'dist {' in code_part and 'vsc.dist' not in code_part:
                 issues.append(f"Line {line_num}: SV 'dist' syntax found in code")
             elif re.search(r"\d+'[hHbBdD]", code_part):
                 issues.append(f"Line {line_num}: SV number format found in code")
+            elif re.search(r"'[hHbBdDoO][0-9a-fA-F]", code_part):
+                issues.append(f"Line {line_num}: Malformed SV number literal with stray apostrophe")
             elif ' && ' in code_part:
-                issues.append(f"Line {line_num}: SV '&&' operator - should be 'and'")
+                issues.append(f"Line {line_num}: SV '&&' operator - should be '&'")
             elif ' || ' in code_part:
-                issues.append(f"Line {line_num}: SV '||' operator - should be 'or'")
+                issues.append(f"Line {line_num}: SV '||' operator - should be '|'")
+            elif re.search(r'self\.d\d{4,}', code_part):
+                issues.append(f"Line {line_num}: self-prefixed numeric token (malformed literal)")
+            # Check for SV ternary ? : (not Python's if/else ternary)
+            elif '?' in code_part and ':' in code_part and ' if ' not in code_part:
+                if re.search(r'\S\s*\?\s*\S', code_part):
+                    issues.append(f"Line {line_num}: Possible SV ternary '? :' not converted")
         
         return issues
 
@@ -2275,6 +2290,7 @@ from typing import Optional'''
             return ""
 
         expr = self._convert_numbers(expr)
+        expr = self._convert_ternary(expr)
         expr = self._convert_literal_shifts(expr)
         expr = self._convert_literal_arithmetic(expr)
         expr = self._convert_division_operator(expr)
@@ -2283,38 +2299,61 @@ from typing import Optional'''
         expr = self._convert_bit_slicing(expr)
         expr = self._qualify_enum_values(expr)
         expr = self._add_self_prefix(expr)
-        expr = self._convert_bare_conditions(expr)
+        if is_condition:
+            expr = self._convert_bare_conditions(expr)
         return expr
 
     def _convert_logical_operators(self, expr: str) -> str:
-        """Convert SystemVerilog logical operators to PyVSC equivalents.
+        """Convert SV logical operators to PyVSC-safe operators.
 
-        Conversions:
-        - && -> &
-        - || -> |
-        - !(a == b) -> (a != b)  (invert comparison operators)
-        - !(a != b) -> (a == b)
-        - !(a > b)  -> (a <= b)
-        - !(a < b)  -> (a >= b)
-        - !(a >= b) -> (a < b)
-        - !(a <= b) -> (a > b)
-        - !var -> (var == 0)
+        SV:
+            && -> &
+            || -> |
+            !  -> invert comparison or convert to == 0
 
-        Note: PyVSC's ~ operator doesn't fully work in if_then conditions
-        (is_signed unimplemented error), so we invert comparisons instead.
+        IMPORTANT:
+            PyVSC requires symbolic operators (&, |).
+            DO NOT use Python 'and/or'.
         """
-        # Convert && to & and || to | with proper parenthesization
-        # Python's | and & have higher precedence than ==, so we need parens
-        expr = self._convert_logical_ops_with_parens(expr)
 
-        # Convert negated comparisons by inverting the operator
-        # !(a == b) -> (a != b), !(a != b) -> (a == b), etc.
-        expr = self._invert_negated_comparisons(expr)
+        # -------------------------------------------------
+        # 1. Convert logical AND / OR
+        # -------------------------------------------------
+        expr = expr.replace("&&", " & ")
+        expr = expr.replace("||", " | ")
 
-        # Handle !var patterns (negation of single variables)
-        # Convert !var to (var == 0) - PyVSC understands this
-        # But don't convert != (not equal)
-        expr = re.sub(r'!(?!=)(\w+)', r'(\1 == 0)', expr)
+        # -------------------------------------------------
+        # 2. Invert negated comparisons
+        # !(a == b) -> (a != b)
+        # !(a > b)  -> (a <= b)
+        # -------------------------------------------------
+
+        inverse_ops = {
+            "==": "!=",
+            "!=": "==",
+            ">": "<=",
+            "<": ">=",
+            ">=": "<",
+            "<=": ">"
+        }
+
+        def invert_match(match):
+            inner = match.group(1).strip()
+
+            for op, inv in inverse_ops.items():
+                if op in inner:
+                    lhs, rhs = inner.split(op, 1)
+                    return f"({lhs.strip()} {inv} {rhs.strip()})"
+
+            # Fallback: bitwise invert
+            return f"~({inner})"
+
+        expr = re.sub(r'!\((.*?)\)', invert_match, expr)
+
+        # -------------------------------------------------
+        # 3. Negated variable: !a -> (a == 0)
+        # -------------------------------------------------
+        expr = re.sub(r'!(?!=)(\b\w+\b)', r'(\1 == 0)', expr)
 
         return expr
 
@@ -2485,6 +2524,120 @@ from typing import Optional'''
         return ''.join(result)
 
     @staticmethod
+    def _convert_ternary(expr: str) -> str:
+        """Convert SV ternary (cond ? a : b) to Python (a if cond else b).
+
+        Handles nested parentheses in condition, true-value, and false-value.
+        Processes innermost ternaries first to support nesting.
+
+        Example:
+            flag ? A : B          -> (A if flag else B)
+            (x > 0) ? a : b      -> (a if (x > 0) else b)
+            a ? (b ? c : d) : e  -> ((c if b else d) if a else e)
+        """
+        max_iterations = 20  # Safety limit for nested ternaries
+        for _ in range(max_iterations):
+            # Find the first '?' that is a ternary operator (not inside parens deeper than context)
+            # Strategy: find "cond ? true_val : false_val" pattern
+            # We scan for '?' at the outermost paren level within each sub-expression
+            result = expr
+            found = False
+
+            # Find innermost ternary (no nested ternaries in its components)
+            # Pattern: look for ? ... : where the condition precedes ? and
+            # the true/false values are separated by :
+            i = 0
+            while i < len(result):
+                if result[i] == '?':
+                    # Don't match '??' or other non-ternary uses
+                    if i + 1 < len(result) and result[i + 1] == '?':
+                        i += 2
+                        continue
+
+                    # Extract condition (everything before '?', respecting parens)
+                    # Walk backwards to find the condition start
+                    cond_end = i
+                    paren_depth = 0
+                    j = i - 1
+                    while j >= 0:
+                        ch = result[j]
+                        if ch == ')':
+                            paren_depth += 1
+                        elif ch == '(':
+                            if paren_depth == 0:
+                                break
+                            paren_depth -= 1
+                        elif paren_depth == 0 and ch in (',', ';', '{', '}'):
+                            break
+                        j -= 1
+                    cond_start = j + 1
+                    condition = result[cond_start:cond_end].strip()
+
+                    if not condition:
+                        i += 1
+                        continue
+
+                    # Extract true value and false value after '?'
+                    # Find matching ':' at the same paren depth
+                    paren_depth = 0
+                    colon_pos = -1
+                    k = i + 1
+                    while k < len(result):
+                        ch = result[k]
+                        if ch == '(':
+                            paren_depth += 1
+                        elif ch == ')':
+                            if paren_depth == 0:
+                                break
+                            paren_depth -= 1
+                        elif ch == ':' and paren_depth == 0:
+                            colon_pos = k
+                            break
+                        elif ch == ';' and paren_depth == 0:
+                            break
+                        k += 1
+
+                    if colon_pos == -1:
+                        i += 1
+                        continue
+
+                    true_val = result[i + 1:colon_pos].strip()
+
+                    # Extract false value - extends to end of expression or closing paren/semicolon
+                    paren_depth = 0
+                    m = colon_pos + 1
+                    while m < len(result):
+                        ch = result[m]
+                        if ch == '(':
+                            paren_depth += 1
+                        elif ch == ')':
+                            if paren_depth == 0:
+                                break
+                            paren_depth -= 1
+                        elif ch in (';', ',', '}') and paren_depth == 0:
+                            break
+                        m += 1
+                    false_val = result[colon_pos + 1:m].strip()
+
+                    if not true_val or not false_val:
+                        i += 1
+                        continue
+
+                    # Build Python ternary: (true_val if condition else false_val)
+                    replacement = f"({true_val} if {condition} else {false_val})"
+                    result = result[:cond_start] + replacement + result[m:]
+                    found = True
+                    break
+
+                i += 1
+
+            if not found:
+                break
+            expr = result
+
+        return expr
+
+    @staticmethod
     def _convert_literal_shifts(expr: str) -> str:
         """Wrap numeric literals used as shift LHS with vsc.unsigned().
 
@@ -2623,7 +2776,22 @@ from typing import Optional'''
 
         expr = re.sub(paren_pattern, replace_paren_inside, expr)
 
-        # Pattern 2: identifier inside {values}
+        # Pattern 2: method-call expression inside {values}
+        # e.g. arr.size() inside {[64:256]}  -> arr.size() in vsc.rangelist(vsc.rng(64, 256))
+        method_pattern = r'(\w+\.\w+\(\))\s+inside\s*\{([^}]+)\}'
+
+        def replace_method_inside(match):
+            method_expr = match.group(1)
+            values_str = match.group(2)
+            rangelist = self._translate_inside(values_str)
+            if is_condition:
+                return f'{method_expr}.inside(vsc.rangelist({rangelist}))'
+            else:
+                return f'{method_expr} in vsc.rangelist({rangelist})'
+
+        expr = re.sub(method_pattern, replace_method_inside, expr)
+
+        # Pattern 3: identifier inside {values}
         pattern = r'(\w+)\s+inside\s*\{([^}]+)\}'
 
         def replace_inside(match):
@@ -2640,14 +2808,24 @@ from typing import Optional'''
         return re.sub(pattern, replace_inside, expr)
 
     def _add_self_prefix(self, expr: str) -> str:
-        """Add self. prefix to variable names."""
+        """Add self. prefix to variable names.
+
+        Skips Python keywords, vsc module references, loop index variables,
+        and properly qualifies enum values with their enum class name.
+        """
         def replace_var(match):
             word = match.group(0)
             if word in PYTHON_KEYWORDS:
                 return word
+            # Skip loop index variables (e.g., 'i' in foreach)
+            if hasattr(self, '_current_loop_vars') and word in self._current_loop_vars:
+                return word
             start = match.start()
             if start > 0 and expr[start-1] == '.':
                 return word
+            # Qualify enum values with their enum class name
+            if word in self.enum_value_map:
+                return f"{self.enum_value_map[word]}.{word}"
             if word in self.enum_class_names:
                 end = match.end()
                 if end < len(expr) and expr[end] == '.':
@@ -2668,18 +2846,29 @@ from typing import Optional'''
 
     @staticmethod
     def _convert_numbers(expr: str) -> str:
-        """Convert SV number formats to Python."""
+        """Convert SV number formats to Python.
+
+        Handles both well-formed (N'hXX) and malformed ('dNNN) literals.
+        Malformed literals (missing bit-width prefix) are converted to plain
+        Python integers to prevent stray apostrophes and self-prefixing.
+        """
+        prefix_map = {'h': '0x', 'b': '0b', 'o': '0o', 'd': ''}
+
         def replace_num(match):
             base_char = match.group(2).lower()
-            value = match.group(3)
-            prefix_map = {'h': '0x', 'b': '0b', 'o': '0o', 'd': ''}
-            # Remove underscores from the number value only
-            value = value.replace('_', '')
+            value = match.group(3).replace('_', '')
             return f"{prefix_map.get(base_char, '')}{value}"
 
-        # Only convert SV number literals (N'hXX format)
+        def replace_bare_num(match):
+            """Handle malformed literals like 'd4294967295 (no width prefix)."""
+            base_char = match.group(1).lower()
+            value = match.group(2).replace('_', '')
+            return f"{prefix_map.get(base_char, '')}{value}"
+
+        # Standard SV number literals: N'hXX, 32'd100, 8'b1010
         expr = re.sub(r"(\d+)'([hHbBdDoO])([0-9a-fA-F_]+)", replace_num, expr)
-        # Don't remove underscores globally - they're valid in variable names!
+        # Malformed literals without bit-width: 'dNNN, 'hFF, 'b1010
+        expr = re.sub(r"'([hHbBdDoO])([0-9a-fA-F_]+)", replace_bare_num, expr)
         return expr
 
     def _translate_inside(self, inside_body: str) -> str:

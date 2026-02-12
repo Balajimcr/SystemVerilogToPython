@@ -168,6 +168,83 @@ class IspYuv2rgbRandItem(UvmSequenceItem):
   def cr40(self):
     self.yuv_rdmaY_comp_64B_align in vsc.rangelist(0, 1)
 
+@vsc.randobj
+class TestAndNested:
+  """Translated from SV class: test_and_nested"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(1)
+    self.b = vsc.rand_bit_t(1)
+    self.c = vsc.rand_bit_t(1)
+    self.d = vsc.rand_bit_t(1)
+
+  @vsc.constraint
+  def c1(self):
+    self.a == (self.b  &  self.c  &  self.d)
+
+@vsc.randobj
+class TestOrNested:
+  """Translated from SV class: test_or_nested"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(1)
+    self.b = vsc.rand_bit_t(1)
+    self.c = vsc.rand_bit_t(1)
+    self.d = vsc.rand_bit_t(1)
+
+  @vsc.constraint
+  def c1(self):
+    self.a == (self.b  |  self.c  |  self.d)
+
+@vsc.randobj
+class TestMixed:
+  """Translated from SV class: test_mixed"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(1)
+    self.b = vsc.rand_bit_t(1)
+    self.c = vsc.rand_bit_t(1)
+    self.d = vsc.rand_bit_t(1)
+
+  @vsc.constraint
+  def c1(self):
+    self.a == ((self.b  &  self.c)  |  self.d)
+
+@vsc.randobj
+class TestNotEqual:
+  """Translated from SV class: test_not_equal"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(4)
+    self.b = vsc.rand_bit_t(4)
+
+  @vsc.constraint
+  def c1(self):
+    (self.a != self.b)
+
+@vsc.randobj
+class TestNotRel:
+  """Translated from SV class: test_not_rel"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(4)
+    self.b = vsc.rand_bit_t(4)
+
+  @vsc.constraint
+  def c1(self):
+    (self.a <= self.b)
+
+@vsc.randobj
+class TestNotVar:
+  """Translated from SV class: test_not_var"""
+
+  def __init__(self):
+    self.a = vsc.rand_bit_t(1)
+
+  @vsc.constraint
+  def c1(self):
+    (self.a == 0)
+
 # =============================================================================
 # USAGE EXAMPLE
 # =============================================================================
@@ -193,3 +270,98 @@ if __name__ == '__main__':
     print(f'  IsImageWidth = {isp_yuv2rgb_rand_item.IsImageWidth}')
     print(f'  IsImageHeight = {isp_yuv2rgb_rand_item.IsImageHeight}')
     print(f'  IsGridMode = {isp_yuv2rgb_rand_item.IsGridMode}')
+
+  # Create and randomize TestAndNested
+  test_and_nested = TestAndNested()
+  test_and_nested_randomized = False
+  try:
+    test_and_nested.randomize()
+    test_and_nested_randomized = True
+    print(f'TestAndNested randomized successfully')
+  except Exception as e:
+    print(f'TestAndNested randomize failed: {e}')
+
+  if test_and_nested_randomized:
+    # Print field values
+    print(f'  a = {test_and_nested.a}')
+    print(f'  b = {test_and_nested.b}')
+    print(f'  c = {test_and_nested.c}')
+    print(f'  d = {test_and_nested.d}')
+
+  # Create and randomize TestOrNested
+  test_or_nested = TestOrNested()
+  test_or_nested_randomized = False
+  try:
+    test_or_nested.randomize()
+    test_or_nested_randomized = True
+    print(f'TestOrNested randomized successfully')
+  except Exception as e:
+    print(f'TestOrNested randomize failed: {e}')
+
+  if test_or_nested_randomized:
+    # Print field values
+    print(f'  a = {test_or_nested.a}')
+    print(f'  b = {test_or_nested.b}')
+    print(f'  c = {test_or_nested.c}')
+    print(f'  d = {test_or_nested.d}')
+
+  # Create and randomize TestMixed
+  test_mixed = TestMixed()
+  test_mixed_randomized = False
+  try:
+    test_mixed.randomize()
+    test_mixed_randomized = True
+    print(f'TestMixed randomized successfully')
+  except Exception as e:
+    print(f'TestMixed randomize failed: {e}')
+
+  if test_mixed_randomized:
+    # Print field values
+    print(f'  a = {test_mixed.a}')
+    print(f'  b = {test_mixed.b}')
+    print(f'  c = {test_mixed.c}')
+    print(f'  d = {test_mixed.d}')
+
+  # Create and randomize TestNotEqual
+  test_not_equal = TestNotEqual()
+  test_not_equal_randomized = False
+  try:
+    test_not_equal.randomize()
+    test_not_equal_randomized = True
+    print(f'TestNotEqual randomized successfully')
+  except Exception as e:
+    print(f'TestNotEqual randomize failed: {e}')
+
+  if test_not_equal_randomized:
+    # Print field values
+    print(f'  a = {test_not_equal.a}')
+    print(f'  b = {test_not_equal.b}')
+
+  # Create and randomize TestNotRel
+  test_not_rel = TestNotRel()
+  test_not_rel_randomized = False
+  try:
+    test_not_rel.randomize()
+    test_not_rel_randomized = True
+    print(f'TestNotRel randomized successfully')
+  except Exception as e:
+    print(f'TestNotRel randomize failed: {e}')
+
+  if test_not_rel_randomized:
+    # Print field values
+    print(f'  a = {test_not_rel.a}')
+    print(f'  b = {test_not_rel.b}')
+
+  # Create and randomize TestNotVar
+  test_not_var = TestNotVar()
+  test_not_var_randomized = False
+  try:
+    test_not_var.randomize()
+    test_not_var_randomized = True
+    print(f'TestNotVar randomized successfully')
+  except Exception as e:
+    print(f'TestNotVar randomize failed: {e}')
+
+  if test_not_var_randomized:
+    # Print field values
+    print(f'  a = {test_not_var.a}')

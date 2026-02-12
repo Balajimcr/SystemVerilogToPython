@@ -344,3 +344,55 @@ class isp_yuv2rgb_rand_item extends uvm_sequence_item;
      }
 
 endclass
+
+// ===================================================================
+// REPRODUCTION SAMPLES A-F — used to verify logical operator fixes
+// ===================================================================
+
+// SAMPLE A — Nested &&
+class test_and_nested;
+  rand bit a, b, c, d;
+  constraint c1 {
+    a == (b && c && d);
+  }
+endclass
+
+// SAMPLE B — Nested ||
+class test_or_nested;
+  rand bit a, b, c, d;
+  constraint c1 {
+    a == (b || c || d);
+  }
+endclass
+
+// SAMPLE C — Mixed && and ||
+class test_mixed;
+  rand bit a, b, c, d;
+  constraint c1 {
+    a == ((b && c) || d);
+  }
+endclass
+
+// SAMPLE D — Negation of Comparison
+class test_not_equal;
+  rand bit [3:0] a, b;
+  constraint c1 {
+    !(a == b);
+  }
+endclass
+
+// SAMPLE E — Negation of Relational
+class test_not_rel;
+  rand bit [3:0] a, b;
+  constraint c1 {
+    !(a > b);
+  }
+endclass
+
+// SAMPLE F — Negated Variable
+class test_not_var;
+  rand bit a;
+  constraint c1 {
+    !a;
+  }
+endclass
