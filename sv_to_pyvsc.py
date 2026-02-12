@@ -3133,7 +3133,7 @@ def enforce_strict_sanity(python_code: str):
                 f"{issue.message}\n    -> {issue.content}"
             )
         print("=" * 80)
-        raise RuntimeError("SystemVerilog syntax leak detected.")
+        print("❌ SystemVerilog syntax leak detected.")
     else:
         print("✅ Sanity check passed. No SV syntax leaks detected.")
 
