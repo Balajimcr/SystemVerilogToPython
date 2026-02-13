@@ -3346,18 +3346,12 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
         log_content.append("=" * 80 + "\n")
 
         # Write to log file
-        log_written_successfully = False
-        try:
-            with open('sanity_check.log', 'a') as f:
-                f.write('\n'.join(log_content))
-            log_written_successfully = True
-        except Exception as e:
-            print(f"Error writing to sanity_check.log: {e}", file=sys.stderr)
+        with open('sanity_check.log', 'a') as f:
+            f.write('\n'.join(log_content))
         
         # Print to console
         print('\n'.join(log_content))
-        if log_written_successfully:
-            print("📋 Sanity check issues have been saved to sanity_check.log")
+        print("📋 Sanity check issues have been saved to sanity_check.log")
 
     else:
         print("✅ Sanity check passed. No SV syntax leaks detected.")
