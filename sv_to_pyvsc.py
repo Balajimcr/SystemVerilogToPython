@@ -680,6 +680,9 @@ class PyVSCGenerator:
             for issue in leak_issues:
                 self._add_warning(issue)
 
+        original_sv_dump = "\n\n".join(cls.original_code for cls in sv_classes)
+        enforce_strict_sanity(final_code, original_sv_dump)
+
         return TranslationResult(
             pyvsc_code=final_code,
             warnings=self.warnings,
@@ -3053,10 +3056,6 @@ class SVtoPyVSCTranslator:
                         f.write(result.pyvsc_code)
                     if print_output:
                         print(f"Output written to: {output_path}")
-                
-                # Run sanity check after writing the file
-                enforce_strict_sanity(result.pyvsc_code, sv_code)
-                
                 pbar.update(1)
             finally:
                 pbar.close()
@@ -3068,9 +3067,6 @@ class SVtoPyVSCTranslator:
                     f.write(result.pyvsc_code)
                 if print_output:
                     print(f"Output written to: {output_path}")
-
-            # Run sanity check after writing the file
-            enforce_strict_sanity(result.pyvsc_code, sv_code)
 
         return result
 
