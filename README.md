@@ -51,6 +51,87 @@ cd SystemVerilogToPython
 pip install -r requirements.txt
 ```
 
+## Windows Installation (via WSL)
+
+The `pyvsc` library and its dependencies do not fully support native Windows. Therefore, Windows users must use the Windows Subsystem for Linux (WSL) to run the PyVSC-related parts of this tool, such as randomization and test vector generation.
+
+Follow these steps to set up the environment on Windows:
+
+### 1. Install WSL
+
+If you don't have WSL installed, open PowerShell as Administrator and run:
+
+```powershell
+wsl --install
+```
+
+This will install the default Ubuntu distribution. After installation, you'll be prompted to create a username and password for your new Linux environment.
+
+For more details, refer to the [official Microsoft documentation](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+### 2. Clone the Repository
+
+Clone the project into your Windows filesystem (e.g., `C:\Users\YourUser\projects`):
+
+```bash
+git clone https://github.com/balajimcr/SystemVerilogToPython.git
+cd SystemVerilogToPython
+```
+
+### 3. Set Up the WSL Environment
+
+Now, start a WSL terminal. You can do this by typing `wsl` in your Windows Command Prompt or PowerShell, or by finding your installed distribution (e.g., Ubuntu) in the Start Menu.
+
+Inside the WSL terminal, navigate to the project directory you just cloned. Windows drives are mounted under `/mnt/`, so for example, `C:\` becomes `/mnt/c/`.
+
+```bash
+# Example: navigate to C:\D\SystemVerilogToPython
+cd /mnt/c/D/SystemVerilogToPython
+```
+
+### 4. Create a Python Virtual Environment in WSL
+
+Create a virtual environment within the project directory. The `Env.csh` file specifies using Python 3.10.
+
+```bash
+# Ensure you have python3.10 and venv installed in your WSL distro
+# sudo apt-get update
+# sudo apt-get install python3.10 python3.10-venv
+
+# Create the virtual environment (named .wsl_venv as per project convention)
+python3.10 -m venv .wsl_venv
+```
+
+### 5. Activate the Environment and Install Dependencies
+
+Activate the new virtual environment and install the required Python packages from `requirements.txt`.
+
+```bash
+# Activate the virtual environment
+source .wsl_venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 6. Launching the Application
+
+You can now run the command-line scripts or the GUI from your WSL terminal.
+
+-   **To run the GUI**, make sure you have a WSLg-compatible version of WSL (most modern installs are). The GUI can be launched from the WSL terminal and will appear on your Windows desktop.
+
+    ```bash
+    python sv_to_pyvsc_gui.py
+    ```
+
+-   **To use the command-line translator**:
+
+    ```bash
+    python sv_to_pyvsc.py your_file.sv
+    ```
+
+The GUI has a "Use WSL" toggle that is enabled by default on Windows systems. This ensures that any PyVSC-dependent commands (like randomization tests) are correctly executed inside your WSL environment.
+
 ## Usage
 
 ### Command Line
