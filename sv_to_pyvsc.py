@@ -404,25 +404,32 @@ class SVParser:
         if len(groups) < 3:
             return None
 
-        try:
-            rand_type, data_type = groups[0], groups[1]
+        rand_type, data_type = groups[0], groups[1]
 
-            # Determine field type
-            field_type = {
-                'rand': FieldType.RAND,
-                'randc': FieldType.RANDC
-            }.get(rand_type, FieldType.NON_RAND)
+        # Determine field type
+        field_type = {
+            'rand': FieldType.RAND,
+            'randc': FieldType.RANDC
+        }.get(rand_type, FieldType.NON_RAND)
 
-            # Parse based on data type
-            if data_type in ('bit', 'logic'):
-                return self._parse_bit_field(groups, original, field_type, data_type)
-            elif data_type in WIDTH_MAP:
-                return self._parse_int_field(groups, original, field_type, data_type)
-            elif data_type.endswith(('_e', '_t')):
-                return self._parse_enum_field(groups, original, field_type, data_type)
+        # Parse based on data type
+        if data_type in ('bit', 'logic'):
+            width_str = groups[3] if len(groups) > 3 else None
+            array_size_str = groups[5] if len(groups) > 5 else None
+            if width_str and not width_str.isdigit():
+                return None
+            if array_size_str and not array_size_str.isdigit():
+                return None
+            return self._parse_bit_field(groups, original, field_type, data_type)
+        if data_type in WIDTH_MAP:
+            if len(groups) <= 3 or not groups[3]:
+                return None
+            return self._parse_int_field(groups, original, field_type, data_type)
+        if data_type.endswith(('_e', '_t')):
+            if len(groups) <= 2 or not groups[2]:
+                return None
+            return self._parse_enum_field(groups, original, field_type, data_type)
 
-        except (IndexError, ValueError, TypeError):
-            pass
         return None
 
     def _parse_bit_field(self, groups: tuple, original: str,
@@ -1835,17 +1842,18 @@ from typing import Optional'''
             "Conditional constraint detected - verify if/else_if/else_then structure"
         )
 
-        try:
-            return self._parse_full_conditional(stmt, 0)
-        except Exception as e:
-            self._add_review_item(f"Conditional parsing error: {str(e)[:50]}")
-            # Fallback: return as comment
-            lines = ["# TODO: Complex conditional - manual translation needed"]
-            for line in stmt.split('\n'):
-                if line.strip():
-                    lines.append(f"# {line.strip()}")
-            lines.append("pass")
-            return lines
+        parsed_lines = self._parse_full_conditional(stmt, 0)
+        if parsed_lines:
+            return parsed_lines
+
+        self._add_review_item("Conditional parsing could not build a valid chain")
+        # Fallback: return as comment
+        lines = ["# TODO: Complex conditional - manual translation needed"]
+        for line in stmt.split('\n'):
+            if line.strip():
+                lines.append(f"# {line.strip()}")
+        lines.append("pass")
+        return lines
 
     def _parse_full_conditional(self, stmt: str, base_indent: int) -> List[str]:
         """Parse complete if/else-if/else chain."""
@@ -2985,12 +2993,9 @@ from typing import Optional'''
                 f"    # Create and randomize {class_name}",
                 f"    {var_name} = {class_name}()",
                 f"    {var_name}_randomized = False",
-                f"    try:",
-                f"        {var_name}.randomize()",
-                f"        {var_name}_randomized = True",
-                f"        print(f'{class_name} randomized successfully')",
-                f"    except Exception as e:",
-                f"        print(f'{class_name} randomize failed: {{e}}')",
+                f"    {var_name}.randomize()",
+                f"    {var_name}_randomized = True",
+                f"    print(f'{class_name} randomized successfully')",
                 ""
             ])
 
@@ -3030,7 +3035,7 @@ class SVtoPyVSCTranslator:
         print_output: bool = True
     ) -> TranslationResult:
         """Translate a SystemVerilog file to pyvsc."""
-        with open(input_path, 'r') as f:
+        with open(input_path, 'r', encoding='utf-8') as f:
             sv_code = f.read()
 
         if progress:
@@ -3052,7 +3057,7 @@ class SVtoPyVSCTranslator:
                 pbar.update(1)
 
                 if output_path:
-                    with open(output_path, 'w') as f:
+                    with open(output_path, 'w', encoding='utf-8') as f:
                         f.write(result.pyvsc_code)
                     if print_output:
                         print(f"Output written to: {output_path}")
@@ -3063,7 +3068,7 @@ class SVtoPyVSCTranslator:
             result = self.translate_code(sv_code, jobs=jobs, progress=progress)
 
             if output_path:
-                with open(output_path, 'w') as f:
+                with open(output_path, 'w', encoding='utf-8') as f:
                     f.write(result.pyvsc_code)
                 if print_output:
                     print(f"Output written to: {output_path}")
@@ -3319,7 +3324,7 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
     if issues:
         log_content = []
         log_content.append("\n" + "=" * 80)
-        log_content.append("⚠️  SANITY CHECK FAILED (PROCESS CONTINUES)")
+        log_content.append("SANITY CHECK FAILED (PROCESS CONTINUES)")
         log_content.append("=" * 80)
 
         for issue in issues:
@@ -3329,7 +3334,7 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
             )
 
         log_content.append("\n" + "-" * 80)
-        log_content.append("🔎 ORIGINAL SYSTEMVERILOG SOURCE")
+        log_content.append("ORIGINAL SYSTEMVERILOG SOURCE")
         log_content.append("-" * 80)
         if original_sv_code:
             log_content.append(original_sv_code.strip())
@@ -3337,24 +3342,24 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
             log_content.append("Original SV code not available")
 
         log_content.append("\n" + "-" * 80)
-        log_content.append("🔎 GENERATED PYVSC OUTPUT")
+        log_content.append("GENERATED PYVSC OUTPUT")
         log_content.append("-" * 80)
         log_content.append(python_code.strip())
 
         log_content.append("\n" + "=" * 80)
-        log_content.append("⚠️  Sanity issues detected. PyVSC file still generated.")
+        log_content.append("Sanity issues detected. PyVSC file still generated.")
         log_content.append("=" * 80 + "\n")
 
         # Write to log file
-        with open('sanity_check.log', 'a') as f:
+        with open('sanity_check.log', 'a', encoding='utf-8') as f:
             f.write('\n'.join(log_content))
         
         # Print to console
         print('\n'.join(log_content))
-        print("📋 Sanity check issues have been saved to sanity_check.log")
+        print("Sanity check issues have been saved to sanity_check.log")
 
     else:
-        print("✅ Sanity check passed. No SV syntax leaks detected.")
+        print("Sanity check passed. No SV syntax leaks detected.")
 
 
 
@@ -3373,17 +3378,17 @@ def _resolve_output_paths(
     input_paths: List[Path],
     output_arg: str,
     default_output: str
-) -> Dict[Path, Path]:
+) -> Tuple[Dict[Path, Path], Optional[str]]:
     """Resolve output paths for one or more input files."""
     output_provided = output_arg != default_output
 
     if len(input_paths) == 1:
-        return {input_paths[0]: Path(output_arg)}
+        return {input_paths[0]: Path(output_arg)}, None
 
     if output_provided:
         out_dir = Path(output_arg)
         if out_dir.suffix:
-            raise ValueError("Output must be a directory when translating multiple files.")
+            return {}, "Output must be a directory when translating multiple files."
         out_dir.mkdir(parents=True, exist_ok=True)
     else:
         out_dir = None
@@ -3392,7 +3397,7 @@ def _resolve_output_paths(
     for in_path in input_paths:
         out_path = (out_dir / f"{in_path.stem}.py") if out_dir else in_path.with_suffix('.py')
         mapping[in_path] = out_path
-    return mapping
+    return mapping, None
 
 
 def _translate_file_task(
@@ -3402,15 +3407,19 @@ def _translate_file_task(
     class_jobs: int,
     progress: bool,
     print_output: bool
-) -> TranslationResult:
+) -> Tuple[Optional[TranslationResult], Optional[str]]:
     translator = SVtoPyVSCTranslator(verbose=report)
-    return translator.translate_file(
-        str(input_path),
-        str(output_path),
-        jobs=class_jobs,
-        progress=progress,
-        print_output=print_output
-    )
+    try:
+        result = translator.translate_file(
+            str(input_path),
+            str(output_path),
+            jobs=class_jobs,
+            progress=progress,
+            print_output=print_output
+        )
+        return result, None
+    except Exception as e:
+        return None, str(e)
 
 
 def main():
@@ -3473,16 +3482,19 @@ def main():
         print(f"Error: No input files found for '{args.input}'", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        output_map = _resolve_output_paths(input_paths, args.output, default_output)
-    except FileNotFoundError:
-        print(f"Error: File not found: {args.input}", file=sys.stderr)
+    missing_inputs = [path for path in input_paths if not path.exists()]
+    if missing_inputs:
+        print(f"Error: File not found: {missing_inputs[0]}", file=sys.stderr)
         sys.exit(1)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+
+    non_file_inputs = [path for path in input_paths if not path.is_file()]
+    if non_file_inputs:
+        print(f"Error: Input is not a regular file: {non_file_inputs[0]}", file=sys.stderr)
         sys.exit(1)
-    except Exception as e:
-        print(f"Error during translation setup: {e}", file=sys.stderr)
+
+    output_map, output_error = _resolve_output_paths(input_paths, args.output, default_output)
+    if output_error:
+        print(f"Error: {output_error}", file=sys.stderr)
         sys.exit(1)
 
     file_count = len(input_paths)
@@ -3507,17 +3519,18 @@ def main():
         only_input = input_paths[0]
         out_path = output_map[only_input]
         translator = SVtoPyVSCTranslator(verbose=args.report)
-        try:
-            result = translator.translate_file(
-                str(only_input),
-                str(out_path),
-                jobs=class_jobs,
-                progress=progress_classes,
-                print_output=True
-            )
-        except Exception as e:
-            print(f"Error during translation: {e}", file=sys.stderr)
+        task_result, task_error = _translate_file_task(
+            only_input,
+            out_path,
+            args.report,
+            class_jobs,
+            progress_classes,
+            True
+        )
+        if task_error or task_result is None:
+            print(f"Error during translation: {task_error}", file=sys.stderr)
             sys.exit(1)
+        result = task_result
 
         if args.report:
             translator.print_report(result)
@@ -3545,10 +3558,11 @@ def main():
                 }
                 for future in as_completed(future_map):
                     in_path = future_map[future]
-                    try:
-                        results[in_path] = future.result()
-                    except Exception as e:
-                        errors.append((in_path, e))
+                    result, error_msg = future.result()
+                    if error_msg:
+                        errors.append((in_path, error_msg))
+                    elif result is not None:
+                        results[in_path] = result
                     pbar.update(1)
         finally:
             pbar.close()
@@ -3556,17 +3570,18 @@ def main():
         pbar = _get_progress_bar(file_count, "Translating files", progress_files)
         try:
             for in_path, out_path in output_map.items():
-                try:
-                    results[in_path] = _translate_file_task(
-                        in_path,
-                        out_path,
-                        False,
-                        class_jobs,
-                        False,
-                        not progress_files
-                    )
-                except Exception as e:
-                    errors.append((in_path, e))
+                result, error_msg = _translate_file_task(
+                    in_path,
+                    out_path,
+                    False,
+                    class_jobs,
+                    False,
+                    not progress_files
+                )
+                if error_msg:
+                    errors.append((in_path, error_msg))
+                elif result is not None:
+                    results[in_path] = result
                 pbar.update(1)
         finally:
             pbar.close()
