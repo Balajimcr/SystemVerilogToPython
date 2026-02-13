@@ -3320,31 +3320,30 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
     """
     validator = PyVSCSanityValidator()
     issues = validator.validate(python_code)
+    py_lines = python_code.splitlines()
+    sv_lines = original_sv_code.splitlines() if original_sv_code else []
+
+    def _line_text(lines: List[str], line_no: int) -> str:
+        if line_no <= 0 or line_no > len(lines):
+            return "<line unavailable>"
+        text = lines[line_no - 1].rstrip()
+        return text if text else "<blank line>"
 
     if issues:
         log_content = []
         log_content.append("\n" + "=" * 80)
-        log_content.append("SANITY CHECK FAILED (PROCESS CONTINUES)")
+        log_content.append("⚠️  SANITY CHECK FAILED")
         log_content.append("=" * 80)
 
         for issue in issues:
+            py_line = _line_text(py_lines, issue.line)
+            sv_line = _line_text(sv_lines, issue.line) if sv_lines else "<original SV not available>"
             log_content.append(
                 f"[{issue.severity}] Line {issue.line}: "
-                f"{issue.message}\n    -> {issue.content}"
+                f"{issue.message}\n"
+                f"    Input  (SV L{issue.line}): {sv_line}\n"
+                f"    Output (PY L{issue.line}): {py_line}"
             )
-
-        log_content.append("\n" + "-" * 80)
-        log_content.append("ORIGINAL SYSTEMVERILOG SOURCE")
-        log_content.append("-" * 80)
-        if original_sv_code:
-            log_content.append(original_sv_code.strip())
-        else:
-            log_content.append("Original SV code not available")
-
-        log_content.append("\n" + "-" * 80)
-        log_content.append("GENERATED PYVSC OUTPUT")
-        log_content.append("-" * 80)
-        log_content.append(python_code.strip())
 
         log_content.append("\n" + "=" * 80)
         log_content.append("Sanity issues detected. PyVSC file still generated.")
@@ -3359,7 +3358,7 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
         print("Sanity check issues have been saved to sanity_check.log")
 
     else:
-        print("Sanity check passed. No SV syntax leaks detected.")
+        print("✅ Sanity check passed. No SV syntax leaks detected.")
 
 
 
