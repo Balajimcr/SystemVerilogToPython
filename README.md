@@ -48,7 +48,7 @@ git clone https://github.com/balajimcr/SystemVerilogToPython.git
 cd SystemVerilogToPython
 
 # Install dependencies (pyvsc + tqdm)
-pip install -r requirements.txt
+pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
 ```
 
 ## Windows Installation (via WSL)
@@ -111,7 +111,7 @@ Activate the new virtual environment and install the required Python packages fr
 source .wsl_venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
 ```
 
 ### 6. Launching the Application
