@@ -3310,38 +3310,48 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
     Perform sanity validation.
     If syntax leaks are found:
         - Print detailed debug report
+        - Write issues to sanity_check.log
         - DO NOT stop execution
     """
     validator = PyVSCSanityValidator()
     issues = validator.validate(python_code)
 
     if issues:
-        print("\n" + "=" * 80)
-        print("⚠️  SANITY CHECK FAILED (PROCESS CONTINUES)")
-        print("=" * 80)
+        log_content = []
+        log_content.append("\n" + "=" * 80)
+        log_content.append("⚠️  SANITY CHECK FAILED (PROCESS CONTINUES)")
+        log_content.append("=" * 80)
 
         for issue in issues:
-            print(
+            log_content.append(
                 f"[{issue.severity}] Line {issue.line}: "
                 f"{issue.message}\n    -> {issue.content}"
             )
 
-        print("\n" + "-" * 80)
-        print("🔎 ORIGINAL SYSTEMVERILOG SOURCE")
-        print("-" * 80)
+        log_content.append("\n" + "-" * 80)
+        log_content.append("🔎 ORIGINAL SYSTEMVERILOG SOURCE")
+        log_content.append("-" * 80)
         if original_sv_code:
-            print(original_sv_code.strip())
+            log_content.append(original_sv_code.strip())
         else:
-            print("Original SV code not available")
+            log_content.append("Original SV code not available")
 
-        print("\n" + "-" * 80)
-        print("🔎 GENERATED PYVSC OUTPUT")
-        print("-" * 80)
-        print(python_code.strip())
+        log_content.append("\n" + "-" * 80)
+        log_content.append("🔎 GENERATED PYVSC OUTPUT")
+        log_content.append("-" * 80)
+        log_content.append(python_code.strip())
 
-        print("\n" + "=" * 80)
-        print("⚠️  Sanity issues detected. PyVSC file still generated.")
-        print("=" * 80 + "\n")
+        log_content.append("\n" + "=" * 80)
+        log_content.append("⚠️  Sanity issues detected. PyVSC file still generated.")
+        log_content.append("=" * 80 + "\n")
+
+        # Write to log file
+        with open('sanity_check.log', 'w') as f:
+            f.write('\n'.join(log_content))
+        
+        # Print to console
+        print('\n'.join(log_content))
+        print("📋 Sanity check issues have been saved to sanity_check.log")
 
     else:
         print("✅ Sanity check passed. No SV syntax leaks detected.")
