@@ -3332,7 +3332,7 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
     if issues:
         log_content = []
         log_content.append("\n" + "=" * 80)
-        log_content.append("⚠️  SANITY CHECK FAILED")
+        log_content.append("[WARNING] SANITY CHECK FAILED")
         log_content.append("=" * 80)
 
         for issue in issues:
@@ -3358,7 +3358,7 @@ def enforce_strict_sanity(python_code: str, original_sv_code: Optional[str] = No
         print("Sanity check issues have been saved to sanity_check.log")
 
     else:
-        print("✅ Sanity check passed. No SV syntax leaks detected.")
+        print("Sanity check passed. No SV syntax leaks detected.")
 
 
 
