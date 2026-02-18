@@ -28,6 +28,7 @@ import os
 import re
 import argparse
 import importlib
+import subprocess
 import random
 import math
 import time
@@ -43,6 +44,7 @@ try:
         load_overrides,
         randomize_with_overrides,
         patch_vector_with_overrides,
+        apply_overrides_to_sv_file,
         print_override_summary,
         OverrideSpec,
     )
@@ -54,6 +56,7 @@ except ImportError:
             load_overrides,
             randomize_with_overrides,
             patch_vector_with_overrides,
+            apply_overrides_to_sv_file,
             print_override_summary,
             OverrideSpec,
         )
@@ -127,12 +130,39 @@ class FieldStats:
         self.bit_width = max(1, self.bit_width)
 
 
+def _module_to_path(module_name: str, ext: str) -> str:
+    """Resolve a python module name to a source-file path."""
+    return module_name.replace(".", os.sep) + ext
+
+
+def _regenerate_pyvsc_from_sv(module_name: str) -> None:
+    """Run sv_to_pyvsc.py to regenerate <module>.py from <module>.sv."""
+    sv_path = _module_to_path(module_name, ".sv")
+    py_path = _module_to_path(module_name, ".py")
+    translator = Path(__file__).resolve().parent / "sv_to_pyvsc.py"
+
+    if not os.path.exists(sv_path):
+        raise FileNotFoundError(f"SV source not found for module '{module_name}': {sv_path}")
+    if not translator.is_file():
+        raise FileNotFoundError(f"Translator not found: {translator}")
+
+    cmd = [sys.executable, str(translator), sv_path, "-o", py_path]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        detail = stderr if stderr else stdout
+        raise RuntimeError(
+            f"SV->PyVSC translation failed for {sv_path} (exit={result.returncode}): {detail}"
+        )
+
+
 def parse_pyvsc_file(module_name: str) -> Dict[str, FieldSpec]:
     """Parse PyVSC source file to extract field specifications (bit widths, ranges)."""
     field_specs: Dict[str, FieldSpec] = {}
 
     # Try to find the source file
-    pyvsc_file = f"{module_name}.py"
+    pyvsc_file = _module_to_path(module_name, ".py")
     if not os.path.exists(pyvsc_file):
         print(f"Warning: Could not find PyVSC source file: {pyvsc_file}")
         return field_specs
@@ -320,6 +350,23 @@ def get_field_value(obj, field_name: str) -> Optional[Any]:
         return None
 
 
+def _clamp_with_range_map(
+    values: Dict[str, Any],
+    range_map: Dict[str, Tuple[int, int]],
+) -> Dict[str, Any]:
+    """Clamp dict values in-place to provided [min, max] ranges."""
+    patched = dict(values)
+    for name, (lo, hi) in range_map.items():
+        if name not in patched:
+            continue
+        try:
+            val = int(patched[name])
+            patched[name] = max(lo, min(hi, val))
+        except (TypeError, ValueError):
+            pass
+    return patched
+
+
 def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
                          field_stats: Dict[str, FieldStats],
                          param_overrides: Optional[Dict] = None,
@@ -370,6 +417,10 @@ def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
             value = get_field_value(obj, name)
             if value is not None:
                 override_values[name] = value
+        if _HAS_OVERRIDE:
+            override_values = patch_vector_with_overrides(
+                override_values, param_overrides
+            )
 
     return vector, override_values
 
@@ -380,11 +431,11 @@ def _randomize_worker(args_tuple):
     Creates a fresh PyVSC instance per call to avoid any shared state.
     Each worker independently imports the module and instantiates the class.
 
-    The *override_field_names* element (6th) is a list of overridden field
-    names to extract from the randomized object.  These values are returned
-    as a separate dict so the caller can write companion override files.
+    The *override_ranges* element (6th) is a dict:
+        {field_name: (override_min, override_max)}
+    used to constrain randomization in worker processes.
     """
-    module_name, class_name, fields, run_id, seed, override_field_names = args_tuple
+    module_name, class_name, fields, run_id, seed, override_ranges = args_tuple
 
     # Per-run deterministic seed
     if seed is not None:
@@ -399,13 +450,27 @@ def _randomize_worker(args_tuple):
     pyvsc_class = getattr(module, class_name)
     obj = pyvsc_class()
 
-    # Randomize
+    # Randomize (apply override ranges at solve-time when provided)
     failed = False
     try:
-        obj.randomize()
+        if override_ranges:
+            with obj.randomize_with() as it:
+                for attr_name, (lo, hi) in override_ranges.items():
+                    if hasattr(it, attr_name):
+                        field = getattr(it, attr_name)
+                        field >= lo
+                        field <= hi
+        else:
+            obj.randomize()
     except Exception as e:
         failed = True
         print(f"Warning: Randomization failed for run {run_id}: {e}")
+        # Fallback: attempt unconstrained randomization.
+        try:
+            obj.randomize()
+            failed = False
+        except Exception:
+            pass
 
     # Extract field values
     vector = {}
@@ -418,10 +483,14 @@ def _randomize_worker(args_tuple):
 
     # Extract overridden parameter values for companion file
     override_values: Dict[str, Any] = {}
-    for name in (override_field_names or []):
+    for name in (override_ranges or {}):
         value = get_field_value(obj, name)
         if value is not None:
             override_values[name] = value
+
+    if override_ranges:
+        vector = _clamp_with_range_map(vector, override_ranges)
+        override_values = _clamp_with_range_map(override_values, override_ranges)
 
     elapsed = time.perf_counter() - t0
     return run_id, vector, elapsed, failed, override_values
@@ -735,6 +804,50 @@ Examples:
     fields = parse_hw_field_file(args.hw_field_file)
     print(f"\nLoaded {len(fields)} fields from {args.hw_field_file}")
 
+    # Load parameter overrides (if provided)
+    param_overrides: Dict[str, 'OverrideSpec'] = {}
+    active_override_ranges: Dict[str, Tuple[int, int]] = {}
+    if args.overrides:
+        if not _HAS_OVERRIDE:
+            print("Warning: param_override module not found — ignoring --overrides")
+        elif not os.path.exists(args.overrides):
+            print(f"Warning: Override CSV not found: {args.overrides}")
+        else:
+            param_overrides = load_overrides(args.overrides)
+            print(f"\nLoaded {len(param_overrides)} parameter override(s)")
+            active_override_ranges = {
+                n: (s.override_min, s.override_max)
+                for n, s in param_overrides.items()
+                if s.is_overridden
+            }
+
+            # Preferred flow:
+            #  1) patch SV constraints from CSV
+            #  2) re-translate SV -> PyVSC
+            sv_path = _module_to_path(args.pyvsc_module, ".sv")
+            if os.path.exists(sv_path):
+                try:
+                    matched, updated = apply_overrides_to_sv_file(
+                        sv_path, param_overrides, backup=True
+                    )
+                    print(
+                        f"  Applied overrides to SV source: {updated} updated "
+                        f"(matched {matched} range constraints) [{sv_path}]"
+                    )
+                    if updated > 0:
+                        print(f"  Backup written to: {sv_path}.bak")
+                        _regenerate_pyvsc_from_sv(args.pyvsc_module)
+                        print("  Regenerated PyVSC from updated SV.")
+                    else:
+                        print("  No SV range changes detected; skipping translation.")
+                except Exception as e:
+                    print(f"Warning: Failed SV override/translation flow: {e}")
+            else:
+                print(
+                    f"Warning: SV source not found ({sv_path}). "
+                    "Overrides will apply only at randomization time."
+                )
+
     # Parse PyVSC source file for field specifications
     print(f"\nParsing PyVSC source file for field specifications...")
     field_specs = parse_pyvsc_file(args.pyvsc_module)
@@ -748,8 +861,11 @@ Examples:
             stats.spec = field_specs[field_name]
         field_stats[field_name] = stats
 
-    # Load PyVSC class
+    # Load PyVSC class (possibly regenerated from updated SV).
     print(f"Loading PyVSC class '{args.class_name}' from '{args.pyvsc_module}'...")
+    importlib.invalidate_caches()
+    if args.pyvsc_module in sys.modules:
+        del sys.modules[args.pyvsc_module]
     pyvsc_class = load_pyvsc_class(args.pyvsc_module, args.class_name)
 
     # Create instance
@@ -760,31 +876,22 @@ Examples:
         print(f"Error: Could not instantiate class: {e}")
         sys.exit(1)
 
-    # Load parameter overrides (if provided)
-    param_overrides: Dict[str, 'OverrideSpec'] = {}
-    if args.overrides:
-        if not _HAS_OVERRIDE:
-            print("Warning: param_override module not found — ignoring --overrides")
-        elif not os.path.exists(args.overrides):
-            print(f"Warning: Override CSV not found: {args.overrides}")
-        else:
-            param_overrides = load_overrides(args.overrides)
-            print(f"\nLoaded {len(param_overrides)} parameter override(s)")
-            # Show which overrides apply to this object
-            applicable = [n for n in param_overrides if hasattr(obj, n)]
-            non_applicable = [n for n in param_overrides if not hasattr(obj, n)]
-            if applicable:
-                print(f"  Applicable to model: {', '.join(applicable)}")
-            if non_applicable:
-                print(f"  Not in model (ignored): {', '.join(non_applicable)}")
-            active = [n for n, s in param_overrides.items()
-                      if s.is_overridden and n in applicable]
-            if active:
-                print(f"  Active overrides: {', '.join(active)}")
-                for n in active:
-                    s = param_overrides[n]
-                    print(f"    {n}: [{s.orig_min},{s.orig_max}] -> [{s.override_min},{s.override_max}]")
-            print_override_summary(param_overrides, show_all=True)
+    if param_overrides:
+        # Show which overrides apply to this object.
+        applicable = [n for n in param_overrides if hasattr(obj, n)]
+        non_applicable = [n for n in param_overrides if not hasattr(obj, n)]
+        if applicable:
+            print(f"  Applicable to model: {', '.join(applicable)}")
+        if non_applicable:
+            print(f"  Not in model (ignored): {', '.join(non_applicable)}")
+        active = [n for n, s in param_overrides.items()
+                  if s.is_overridden and n in applicable]
+        if active:
+            print(f"  Active overrides: {', '.join(active)}")
+            for n in active:
+                s = param_overrides[n]
+                print(f"    {n}: [{s.orig_min},{s.orig_max}] -> [{s.override_min},{s.override_max}]")
+        print_override_summary(param_overrides, show_all=True)
 
     # Resolve job count
     num_jobs = args.jobs
@@ -822,22 +929,17 @@ Examples:
     total_solve_time = 0.0
 
     if num_jobs > 1:
-        # Parallel execution: each worker creates its own instance
-        # NOTE: Parameter overrides are applied as post-clamp in parallel
-        # mode because workers can't share the override state easily.
-        override_field_names = list(param_overrides.keys()) if param_overrides else []
+        # Parallel execution: each worker creates its own instance and
+        # enforces active override ranges at solve-time.
         worker_args = [
             (args.pyvsc_module, args.class_name, fields, run_id, args.seed,
-             override_field_names)
+             active_override_ranges)
             for run_id in range(args.num_runs)
         ]
         all_override_values = [None] * args.num_runs  # TopParam values per run
         with multiprocessing.Pool(processes=num_jobs) as pool:
             for run_id, vector, elapsed, failed, override_values in pool.imap_unordered(
                     _randomize_worker, worker_args):
-                # Apply parameter override post-clamp for parallel workers
-                if param_overrides and _HAS_OVERRIDE:
-                    vector = patch_vector_with_overrides(vector, param_overrides)
                 vectors[run_id] = vector
                 all_override_values[run_id] = override_values
                 total_solve_time += elapsed

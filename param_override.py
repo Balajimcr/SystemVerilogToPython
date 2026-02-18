@@ -34,6 +34,7 @@ Public API
 - ``save_overrides(csv_path, overrides)``
 - ``randomize_with_overrides(obj, overrides) -> bool``
 - ``patch_vector_with_overrides(vector, overrides) -> Dict``
+- ``apply_overrides_to_sv_file(sv_path, overrides) -> Tuple[int, int]``
 - ``print_override_summary(overrides)``
 - ``generate_override_csv_from_pyvsc(pyvsc_path, csv_path, existing)``
 """
@@ -260,6 +261,82 @@ def patch_vector_with_overrides(
             except (ValueError, TypeError):
                 pass
     return patched
+
+
+def apply_overrides_to_sv_file(
+    sv_path: str,
+    overrides: Dict[str, OverrideSpec],
+    backup: bool = True,
+) -> Tuple[int, int]:
+    """Overwrite SV range constraints using CSV override ranges.
+
+    Rewrites lines matching this shape:
+        (<name> >= <lo> && <name> <= <hi>);
+    when ``<name>`` exists in *overrides*.
+
+    Args:
+        sv_path: Path to the SystemVerilog source file.
+        overrides: Override map from :func:`load_overrides`.
+        backup: If True, create ``<sv_path>.bak`` before writing.
+
+    Returns:
+        Tuple ``(matched_constraints, updated_constraints)``.
+    """
+    if not os.path.exists(sv_path):
+        raise FileNotFoundError(f"SystemVerilog source not found: {sv_path}")
+
+    line_re = re.compile(
+        r"^(?P<indent>\s*)\(\s*(?P<name>\w+)\s*>=\s*(?P<lo>-?\d+)\s*&&\s*"
+        r"(?P=name)\s*<=\s*(?P<hi>-?\d+)\s*\)\s*;\s*(?P<trail>.*)$"
+    )
+
+    with open(sv_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    matched = 0
+    updated = 0
+    out_lines: List[str] = []
+
+    for line in lines:
+        nl = "\n" if line.endswith("\n") else ""
+        body = line[:-1] if nl else line
+        m = line_re.match(body)
+
+        if not m:
+            out_lines.append(line)
+            continue
+
+        matched += 1
+        name = m.group("name")
+        spec = overrides.get(name)
+        if spec is None:
+            out_lines.append(line)
+            continue
+
+        trail = m.group("trail").strip()
+        base = (
+            f"{m.group('indent')}({name} >= {spec.override_min} && "
+            f"{name} <= {spec.override_max});"
+        )
+        if trail:
+            base = f"{base} {trail}"
+        new_line = f"{base}{nl}"
+        out_lines.append(new_line)
+
+        old_lo = int(m.group("lo"))
+        old_hi = int(m.group("hi"))
+        if old_lo != spec.override_min or old_hi != spec.override_max:
+            updated += 1
+
+    if updated > 0:
+        if backup:
+            bak_path = f"{sv_path}.bak"
+            with open(bak_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+        with open(sv_path, "w", encoding="utf-8") as f:
+            f.writelines(out_lines)
+
+    return matched, updated
 
 
 # ---------------------------------------------------------------------------
