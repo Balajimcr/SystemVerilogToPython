@@ -6,8 +6,8 @@
 #   0. Convert XML to SV (exports TopParameter CSV)
 #   1. Translate SystemVerilog to PyVSC Python
 #   2. Run PyVSC randomization test
-#   3. Generate 10 test vectors (with TopParameter companion files)
-#   4. Verify TopParameter companion files
+#   3. Generate 10 test vectors (with override companion files)
+#   4. Verify override companion files
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -36,35 +36,35 @@ python3 example_sv_classes.py
 
 echo
 echo "============================================"
-echo "Step 3: Generating 10 test vectors (with TopParameter companion files)"
+echo "Step 3: Generating 10 test vectors (with override companion files)"
 echo "============================================"
-# --top-params passes the TopParameter CSV so overrides are applied and
-# companion config_NNNN_top_params.txt files are generated per run
+# --overrides passes the parameter override CSV so overrides are applied and
+# companion config_NNNN_overrides.txt files are generated per run
 python3 generate_test_vectors.py example_sv_classes IspYuv2rgbCfg \
     "$SCRIPT_DIR/hw_field.txt" 10 ./output --seed 12345 \
-    --top-params "$SCRIPT_DIR/example_sv_classes_top_params.csv"
+    --overrides "$SCRIPT_DIR/example_sv_classes_top_params.csv"
 
 echo
 echo "============================================"
-echo "Step 4: Verify TopParameter companion files"
+echo "Step 4: Verify override companion files"
 echo "============================================"
-TOP_COUNT=$(find ./output -name "config_*_top_params.txt" 2>/dev/null | wc -l)
-if [ "$TOP_COUNT" -gt 0 ]; then
-    echo "[OK] Found $TOP_COUNT TopParameter companion file(s)"
+OVR_COUNT=$(find ./output -name "config_*_overrides.txt" 2>/dev/null | wc -l)
+if [ "$OVR_COUNT" -gt 0 ]; then
+    echo "[OK] Found $OVR_COUNT override companion file(s)"
     echo
-    echo "Sample content (config_0000_top_params.txt):"
+    echo "Sample content (config_0000_overrides.txt):"
     echo "------------------------------------------------"
-    if [ -f "./output/config_0000_top_params.txt" ]; then
-        cat ./output/config_0000_top_params.txt
+    if [ -f "./output/config_0000_overrides.txt" ]; then
+        cat ./output/config_0000_overrides.txt
     fi
     echo "------------------------------------------------"
 else
-    echo "[WARNING] No TopParameter companion files found in ./output/"
+    echo "[WARNING] No override companion files found in ./output/"
 fi
 
 echo
 echo "============================================"
 echo "Done! Check ./output directory for results"
-echo "  - config_NNNN.txt           : hw_field values per run"
-echo "  - config_NNNN_top_params.txt: TopParameter values per run"
+echo "  - config_NNNN.txt          : hw_field values per run"
+echo "  - config_NNNN_overrides.txt: override values per run"
 echo "============================================"

@@ -37,18 +37,29 @@ from typing import List, Dict, Tuple, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass, field
 
-# TopParameter override support (optional import — module lives alongside)
+# Parameter override support (optional import — module lives alongside)
 try:
-    from top_param_override import (
+    from param_override import (
         load_overrides,
         randomize_with_overrides,
         patch_vector_with_overrides,
         print_override_summary,
         OverrideSpec,
     )
-    _HAS_TOP_PARAM = True
+    _HAS_OVERRIDE = True
 except ImportError:
-    _HAS_TOP_PARAM = False
+    # Backward compat: try old module name
+    try:
+        from top_param_override import (
+            load_overrides,
+            randomize_with_overrides,
+            patch_vector_with_overrides,
+            print_override_summary,
+            OverrideSpec,
+        )
+        _HAS_OVERRIDE = True
+    except ImportError:
+        _HAS_OVERRIDE = False
 
 
 @dataclass
@@ -311,22 +322,22 @@ def get_field_value(obj, field_name: str) -> Optional[Any]:
 
 def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
                          field_stats: Dict[str, FieldStats],
-                         top_overrides: Optional[Dict] = None,
+                         param_overrides: Optional[Dict] = None,
                          ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Generate a single test vector by randomizing the object.
 
-    If *top_overrides* is provided (and the top_param_override module is
+    If *param_overrides* is provided (and the param_override module is
     available), overrides are applied during randomization and as a
     post-clamp fallback.
 
     Returns:
-        A tuple of (vector, top_values) where *vector* contains the
-        hw_field values and *top_values* contains the TopParameter field
+        A tuple of (vector, override_values) where *vector* contains the
+        hw_field values and *override_values* contains the overridden field
         values extracted from the same randomization run.
     """
     try:
-        if top_overrides and _HAS_TOP_PARAM:
-            ok = randomize_with_overrides(obj, top_overrides)
+        if param_overrides and _HAS_OVERRIDE:
+            ok = randomize_with_overrides(obj, param_overrides)
             if not ok:
                 raise RuntimeError("randomize_with_overrides failed")
         else:
@@ -349,18 +360,18 @@ def generate_test_vector(obj, fields: List[Tuple[str, str]], run_id: int,
             field_stats[field_name].values.append(vector[field_name])
 
     # Apply post-clamp for any overrides (belt-and-suspenders)
-    if top_overrides and _HAS_TOP_PARAM:
-        vector = patch_vector_with_overrides(vector, top_overrides)
+    if param_overrides and _HAS_OVERRIDE:
+        vector = patch_vector_with_overrides(vector, param_overrides)
 
-    # Extract TopParameter values from the same randomization run
-    top_values: Dict[str, Any] = {}
-    if top_overrides:
-        for name in top_overrides:
+    # Extract overridden parameter values from the same randomization run
+    override_values: Dict[str, Any] = {}
+    if param_overrides:
+        for name in param_overrides:
             value = get_field_value(obj, name)
             if value is not None:
-                top_values[name] = value
+                override_values[name] = value
 
-    return vector, top_values
+    return vector, override_values
 
 
 def _randomize_worker(args_tuple):
@@ -369,11 +380,11 @@ def _randomize_worker(args_tuple):
     Creates a fresh PyVSC instance per call to avoid any shared state.
     Each worker independently imports the module and instantiates the class.
 
-    The *top_param_names* element (6th) is a list of TopParameter field
+    The *override_field_names* element (6th) is a list of overridden field
     names to extract from the randomized object.  These values are returned
-    as a separate dict so the caller can write companion top_params files.
+    as a separate dict so the caller can write companion override files.
     """
-    module_name, class_name, fields, run_id, seed, top_param_names = args_tuple
+    module_name, class_name, fields, run_id, seed, override_field_names = args_tuple
 
     # Per-run deterministic seed
     if seed is not None:
@@ -405,15 +416,15 @@ def _randomize_worker(args_tuple):
         else:
             vector[field_name] = default_value
 
-    # Extract TopParameter values for companion file
-    top_values: Dict[str, Any] = {}
-    for name in (top_param_names or []):
+    # Extract overridden parameter values for companion file
+    override_values: Dict[str, Any] = {}
+    for name in (override_field_names or []):
         value = get_field_value(obj, name)
         if value is not None:
-            top_values[name] = value
+            override_values[name] = value
 
     elapsed = time.perf_counter() - t0
-    return run_id, vector, elapsed, failed, top_values
+    return run_id, vector, elapsed, failed, override_values
 
 
 def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int):
@@ -426,24 +437,22 @@ def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int
             f.write(f"{field_name} {value}\n")
 
 
-def write_top_params_file(top_values: Dict[str, Any], output_path: str, run_id: int):
-    """Write TopParameter field values for a single run to a companion file.
+def write_overrides_file(override_values: Dict[str, Any], output_path: str, run_id: int):
+    """Write overridden parameter values for a single run to a companion file.
 
     This produces a file alongside each config_NNNN.txt containing the
-    TopParameter values from that randomization run.  hw_field.txt does not
-    include TopParameter entries, so this companion file captures them
-    separately.
+    overridden parameter values from that randomization run.
 
     Args:
-        top_values: Dict mapping TopParameter name -> randomized value.
-        output_path: Destination file path (e.g. config_0000_top_params.txt).
+        override_values: Dict mapping parameter name -> randomized value.
+        output_path: Destination file path (e.g. config_0000_overrides.txt).
         run_id: Run index for the header comment.
     """
     with open(output_path, 'w') as f:
-        f.write(f"# TopParameter Values - Run {run_id}\n")
+        f.write(f"# Override Parameter Values - Run {run_id}\n")
         f.write(f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("#\n")
-        for name, value in top_values.items():
+        for name, value in override_values.items():
             f.write(f"{name} {value}\n")
 
 
@@ -678,9 +687,10 @@ Examples:
                         help='Output format (default: both)')
     parser.add_argument('--jobs', '-j', type=int, default=-1,
                         help='Number of parallel workers (default: 1, use -1 for all cores)')
-    parser.add_argument('--top-params', default=None, metavar='CSV',
-                        help='TopParameter CSV file for range overrides '
-                             '(exported by XML_to_sv_Converter)')
+    parser.add_argument('--overrides', '--top-params', default=None, metavar='CSV',
+                        dest='overrides',
+                        help='Parameter override CSV file for range overrides '
+                             '(exported by XML_to_sv_Converter or param_override.py)')
 
     args = parser.parse_args()
 
@@ -717,8 +727,8 @@ Examples:
     if args.seed:
         print(f"Random Seed  : {args.seed}")
     print(f"Jobs         : {args.jobs}")
-    if args.top_params:
-        print(f"Top Params   : {args.top_params}")
+    if args.overrides:
+        print(f"Overrides    : {args.overrides}")
     print(f"=" * 50)
 
     # Parse field file
@@ -750,31 +760,31 @@ Examples:
         print(f"Error: Could not instantiate class: {e}")
         sys.exit(1)
 
-    # Load TopParameter overrides (if provided)
-    top_overrides: Dict[str, 'OverrideSpec'] = {}
-    if args.top_params:
-        if not _HAS_TOP_PARAM:
-            print("Warning: top_param_override module not found — ignoring --top-params")
-        elif not os.path.exists(args.top_params):
-            print(f"Warning: TopParameter CSV not found: {args.top_params}")
+    # Load parameter overrides (if provided)
+    param_overrides: Dict[str, 'OverrideSpec'] = {}
+    if args.overrides:
+        if not _HAS_OVERRIDE:
+            print("Warning: param_override module not found — ignoring --overrides")
+        elif not os.path.exists(args.overrides):
+            print(f"Warning: Override CSV not found: {args.overrides}")
         else:
-            top_overrides = load_overrides(args.top_params)
-            print(f"\nLoaded {len(top_overrides)} TopParameter override(s)")
+            param_overrides = load_overrides(args.overrides)
+            print(f"\nLoaded {len(param_overrides)} parameter override(s)")
             # Show which overrides apply to this object
-            applicable = [n for n in top_overrides if hasattr(obj, n)]
-            non_applicable = [n for n in top_overrides if not hasattr(obj, n)]
+            applicable = [n for n in param_overrides if hasattr(obj, n)]
+            non_applicable = [n for n in param_overrides if not hasattr(obj, n)]
             if applicable:
                 print(f"  Applicable to model: {', '.join(applicable)}")
             if non_applicable:
                 print(f"  Not in model (ignored): {', '.join(non_applicable)}")
-            active = [n for n, s in top_overrides.items()
+            active = [n for n, s in param_overrides.items()
                       if s.is_overridden and n in applicable]
             if active:
                 print(f"  Active overrides: {', '.join(active)}")
                 for n in active:
-                    s = top_overrides[n]
+                    s = param_overrides[n]
                     print(f"    {n}: [{s.orig_min},{s.orig_max}] -> [{s.override_min},{s.override_max}]")
-            print_override_summary(top_overrides, show_all=True)
+            print_override_summary(param_overrides, show_all=True)
 
     # Resolve job count
     num_jobs = args.jobs
@@ -788,8 +798,8 @@ Examples:
     print(f"\nValidating PyVSC model (single randomize)...")
     t_val = time.perf_counter()
     try:
-        if top_overrides and _HAS_TOP_PARAM:
-            ok = randomize_with_overrides(obj, top_overrides)
+        if param_overrides and _HAS_OVERRIDE:
+            ok = randomize_with_overrides(obj, param_overrides)
             if not ok:
                 raise RuntimeError("randomize_with_overrides returned False")
         else:
@@ -813,23 +823,23 @@ Examples:
 
     if num_jobs > 1:
         # Parallel execution: each worker creates its own instance
-        # NOTE: TopParameter overrides are applied as post-clamp in parallel
+        # NOTE: Parameter overrides are applied as post-clamp in parallel
         # mode because workers can't share the override state easily.
-        top_param_names = list(top_overrides.keys()) if top_overrides else []
+        override_field_names = list(param_overrides.keys()) if param_overrides else []
         worker_args = [
             (args.pyvsc_module, args.class_name, fields, run_id, args.seed,
-             top_param_names)
+             override_field_names)
             for run_id in range(args.num_runs)
         ]
-        all_top_values = [None] * args.num_runs  # TopParam values per run
+        all_override_values = [None] * args.num_runs  # TopParam values per run
         with multiprocessing.Pool(processes=num_jobs) as pool:
-            for run_id, vector, elapsed, failed, top_values in pool.imap_unordered(
+            for run_id, vector, elapsed, failed, override_values in pool.imap_unordered(
                     _randomize_worker, worker_args):
-                # Apply TopParameter post-clamp for parallel workers
-                if top_overrides and _HAS_TOP_PARAM:
-                    vector = patch_vector_with_overrides(vector, top_overrides)
+                # Apply parameter override post-clamp for parallel workers
+                if param_overrides and _HAS_OVERRIDE:
+                    vector = patch_vector_with_overrides(vector, param_overrides)
                 vectors[run_id] = vector
-                all_top_values[run_id] = top_values
+                all_override_values[run_id] = override_values
                 total_solve_time += elapsed
                 if not failed:
                     successful += 1
@@ -851,20 +861,20 @@ Examples:
                 output_path = os.path.join(
                     args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
                 write_test_vector_file(vector, output_path, run_id)
-                # Write companion TopParameter file
-                if top_overrides and all_top_values[run_id]:
+                # Write companion override values file
+                if param_overrides and all_override_values[run_id]:
                     top_path = os.path.join(
                         args.output_dir,
-                        f"{args.prefix}_{run_id:04d}_top_params.txt")
-                    write_top_params_file(
-                        all_top_values[run_id], top_path, run_id)
+                        f"{args.prefix}_{run_id:04d}_overrides.txt")
+                    write_overrides_file(
+                        all_override_values[run_id], top_path, run_id)
     else:
         # Serial execution: reuse single instance (no state accumulation issue)
         for run_id in range(args.num_runs):
             t_iter = time.perf_counter()
-            vector, top_values = generate_test_vector(
+            vector, override_values = generate_test_vector(
                 obj, fields, run_id, field_stats,
-                top_overrides=top_overrides)
+                param_overrides=param_overrides)
             elapsed = time.perf_counter() - t_iter
             total_solve_time += elapsed
             vectors[run_id] = vector
@@ -875,12 +885,12 @@ Examples:
                     args.output_dir, f"{args.prefix}_{run_id:04d}.txt")
                 write_test_vector_file(vector, output_path, run_id)
 
-                # Write companion TopParameter file
-                if top_overrides and top_values:
+                # Write companion override values file
+                if param_overrides and override_values:
                     top_path = os.path.join(
                         args.output_dir,
-                        f"{args.prefix}_{run_id:04d}_top_params.txt")
-                    write_top_params_file(top_values, top_path, run_id)
+                        f"{args.prefix}_{run_id:04d}_overrides.txt")
+                    write_overrides_file(override_values, top_path, run_id)
 
             successful += 1
 
@@ -932,8 +942,8 @@ Examples:
 
     print(f"\nOutput files:")
     print(f"  - {args.prefix}_NNNN.txt              : Config file per run (hw_field values)")
-    if top_overrides:
-        print(f"  - {args.prefix}_NNNN_top_params.txt   : TopParameter values per run")
+    if param_overrides:
+        print(f"  - {args.prefix}_NNNN_overrides.txt   : Override parameter values per run")
     print(f"  - test_vectors_summary.csv     : Basic CSV with all vectors")
     print(f"  - test_vectors_extended.csv    : CSV with statistics header")
     print(f"  - field_statistics.csv         : Statistics per field")

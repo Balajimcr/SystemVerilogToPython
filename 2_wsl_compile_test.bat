@@ -96,37 +96,37 @@ wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/
 
 echo.
 echo ============================================
-echo Step 3: Generating 10 test vectors (with TopParameter companion files)
+echo Step 3: Generating 10 test vectors (with override companion files)
 echo ============================================
 :: Use full HW field path so WSL can find it regardless of cwd
-:: --top-params passes the TopParameter CSV so overrides are applied and
-:: companion config_NNNN_top_params.txt files are generated per run
-wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py isp_yuv2rgb IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345 --top-params %WSL_PROJECT_PATH%/isp_yuv2rgb_top_params.csv"
+:: --overrides passes the parameter override CSV so overrides are applied and
+:: companion config_NNNN_overrides.txt files are generated per run
+wsl -d %WSL_DISTRO% -- bash -lc "cd %WSL_PROJECT_PATH% && . %WSL_VENV_PATH%/bin/activate && python generate_test_vectors.py isp_yuv2rgb IspYuv2rgbCfg %WSL_PROJECT_PATH%/hw_field.txt 10 ./output --seed 12345 --overrides %WSL_PROJECT_PATH%/isp_yuv2rgb_top_params.csv"
 
 echo.
 echo ============================================
-echo Step 4: Verify TopParameter companion files
+echo Step 4: Verify override companion files
 echo ============================================
-echo Checking for TopParameter companion files in ./output ...
-set "TOP_FOUND=0"
-for %%F in (output\config_*_top_params.txt) do (
-    set /a TOP_FOUND+=1
+echo Checking for override companion files in ./output ...
+set "OVR_FOUND=0"
+for %%F in (output\config_*_overrides.txt) do (
+    set /a OVR_FOUND+=1
 )
-if %TOP_FOUND% GTR 0 (
-    echo [OK] Found %TOP_FOUND% TopParameter file(s)
+if %OVR_FOUND% GTR 0 (
+    echo [OK] Found %OVR_FOUND% override file(s)
     echo.
-    echo Sample content (config_0000_top_params.txt):
+    echo Sample content (config_0000_overrides.txt):
     echo ------------------------------------------------
-    if exist "output\config_0000_top_params.txt" type "output\config_0000_top_params.txt"
+    if exist "output\config_0000_overrides.txt" type "output\config_0000_overrides.txt"
     echo ------------------------------------------------
 ) else (
-    echo [WARNING] No TopParameter companion files found in output\
+    echo [WARNING] No override companion files found in output\
 )
 
 echo.
 echo ============================================
 echo Done! Check ./output directory for results
-echo   - config_NNNN.txt           : hw_field values per run
-echo   - config_NNNN_top_params.txt: TopParameter values per run
+echo   - config_NNNN.txt          : hw_field values per run
+echo   - config_NNNN_overrides.txt: override values per run
 echo ============================================
 pause

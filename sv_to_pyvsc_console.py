@@ -242,7 +242,7 @@ class ConsoleRunner:
             "random_seed": self.random_seed,
             "output_dir": self.output_dir,
             "use_wsl": self.use_wsl,
-            "top_params_csv": self.top_params_csv,
+            "overrides_csv": self.overrides_csv,
         }
         try:
             with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -283,10 +283,10 @@ class ConsoleRunner:
             args.use_wsl if args.use_wsl is not None else saved.get("use_wsl", default_wsl)
         )
 
-        # TopParameter CSV path
-        self.top_params_csv: str = (
-            args.top_params
-            or saved.get("top_params_csv", "")
+        # Parameter override CSV path
+        self.overrides_csv: str = (
+            args.overrides
+            or saved.get("overrides_csv", "")
         )
 
         # Resolve relative paths to absolute (critical for WSL commands
@@ -295,8 +295,8 @@ class ConsoleRunner:
             self.input_file_path = os.path.abspath(self.input_file_path)
         if self.hw_field_path and not os.path.isabs(self.hw_field_path):
             self.hw_field_path = os.path.abspath(self.hw_field_path)
-        if self.top_params_csv and not os.path.isabs(self.top_params_csv):
-            self.top_params_csv = os.path.abspath(self.top_params_csv)
+        if self.overrides_csv and not os.path.isabs(self.overrides_csv):
+            self.overrides_csv = os.path.abspath(self.overrides_csv)
 
     # -----------------------------------------------------------------
     # Path Utilities
@@ -454,7 +454,7 @@ class ConsoleRunner:
         self._log(f"  Num vectors  : {self.num_vectors}")
         self._log(f"  Random seed  : {self.random_seed}")
         self._log(f"  Output dir   : {self.output_dir}")
-        self._log(f"  Top params   : {self.top_params_csv or '(none)'}")
+        self._log(f"  Overrides    : {self.overrides_csv or '(none)'}")
         self._log(f"  Platform     : {sys.platform}")
         self._log(f"  Use WSL      : {self.use_wsl}")
         if self.use_wsl:
@@ -631,10 +631,10 @@ class ConsoleRunner:
 
         if success:
             self._log(f"SV file generated: {self.sv_file_path}", "success")
-            # Auto-set top_params_csv if the CSV was created
+            # Auto-set overrides CSV if the CSV was created
             if os.path.exists(auto_csv):
-                self.top_params_csv = auto_csv
-                self._log(f"TopParameter CSV: {auto_csv}", "success")
+                self.overrides_csv = auto_csv
+                self._log(f"Override CSV: {auto_csv}", "success")
             detected = self._detect_class_name()
             if detected:
                 self.class_name = detected
@@ -717,13 +717,13 @@ class ConsoleRunner:
         module_name = os.path.splitext(os.path.basename(self.output_py_path))[0]
         generator = os.path.join(self.project_root, "generate_test_vectors.py")
 
-        # Build --top-params argument if CSV is available
-        top_params_arg = ""
-        if self.top_params_csv and os.path.exists(self.top_params_csv):
+        # Build --overrides argument if CSV is available
+        overrides_arg = ""
+        if self.overrides_csv and os.path.exists(self.overrides_csv):
             if self.use_wsl:
-                top_params_arg = f" --top-params {self._to_wsl_path(self.top_params_csv)}"
+                overrides_arg = f" --overrides {self._to_wsl_path(self.overrides_csv)}"
             else:
-                top_params_arg = f' --top-params "{self.top_params_csv}"'
+                overrides_arg = f' --overrides "{self.overrides_csv}"'
 
         if self.use_wsl:
             wsl_hw_path = self._to_wsl_path(self.hw_field_path)
@@ -739,7 +739,7 @@ class ConsoleRunner:
                 f"python {wsl_project_root}/generate_test_vectors.py "
                 f"{module_name} {self.class_name} {wsl_hw_path} "
                 f"{self.num_vectors} {wsl_output_arg} --seed {self.random_seed}"
-                f"{top_params_arg}"
+                f"{overrides_arg}"
             )
         else:
             # Native Linux: run directly from the Output directory
@@ -748,7 +748,7 @@ class ConsoleRunner:
                 f"{module_name} {self.class_name} "
                 f'"{self.hw_field_path}" '
                 f"{self.num_vectors} {self.output_dir} --seed {self.random_seed}"
-                f"{top_params_arg}"
+                f"{overrides_arg}"
             )
 
         self._print_step_header(3, STEP_NAMES[3])
@@ -857,8 +857,9 @@ def build_parser() -> argparse.ArgumentParser:
         "-o", "--output-dir", default=None, help="Output directory for test vectors"
     )
     parser.add_argument(
-        "--top-params", default=None, metavar="CSV",
-        help="TopParameter CSV for range overrides (auto-detected from XML step)",
+        "--overrides", "--top-params", default=None, metavar="CSV",
+        dest="overrides",
+        help="Parameter override CSV for range overrides (auto-detected from XML step)",
     )
 
     # Test-vector parameters

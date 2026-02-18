@@ -259,12 +259,9 @@ if __name__ == '__main__':
   # Create and randomize IspYuv2rgbRandItem
   isp_yuv2rgb_rand_item = IspYuv2rgbRandItem()
   isp_yuv2rgb_rand_item_randomized = False
-  try:
-    isp_yuv2rgb_rand_item.randomize()
-    isp_yuv2rgb_rand_item_randomized = True
-    print(f'IspYuv2rgbRandItem randomized successfully')
-  except Exception as e:
-    print(f'IspYuv2rgbRandItem randomize failed: {e}')
+  isp_yuv2rgb_rand_item.randomize()
+  isp_yuv2rgb_rand_item_randomized = True
+  print(f'IspYuv2rgbRandItem randomized successfully')
 
   if isp_yuv2rgb_rand_item_randomized:
     # Print field values
