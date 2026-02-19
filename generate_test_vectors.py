@@ -499,9 +499,6 @@ def _randomize_worker(args_tuple):
 def write_test_vector_file(vector: Dict[str, Any], output_path: str, run_id: int):
     """Write a single test vector to a file."""
     with open(output_path, 'w') as f:
-        f.write(f"# Test Vector Configuration - Run {run_id}\n")
-        f.write(f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("#\n")
         for field_name, value in vector.items():
             f.write(f"{field_name} {value}\n")
 
